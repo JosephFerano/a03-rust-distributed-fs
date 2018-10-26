@@ -1,0 +1,8 @@
+[package]
+name = "a03"
+version = "0.1.0"
+authors = ["Joseph Ferano <joseph@ferano.io>"]
+
+[dependencies]
+rusqlite = "0.15.0"
+serde_json = "1.0"
