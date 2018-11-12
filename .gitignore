@@ -5,4 +5,5 @@
 *.swp
 *.tar
 *.tar.gz
+*.db
 dfs_skel/
