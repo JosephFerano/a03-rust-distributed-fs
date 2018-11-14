@@ -9,14 +9,25 @@ fn main() {
 	let conn = Connection::open("dfs.db").unwrap();
 }
 
-
-fn connect(conn : Connection) {
+#[derive(Debug)]
+struct Dnode {
+    id : i32,
+    address : String,
+    port : i32,
 }
 
-fn close(conn : Connection) {
-}
-
-fn add_data_node(conn : Connection, address : String, port : usize) {
+fn add_data_node(conn : &Connection, address : &str, port : i32) {
+    let dn = Dnode {
+        id : 0,
+        address : address.to_string(),
+        port,
+    };
+    match conn.execute(
+        "INSERT INTO dnode (address, port) VALUES (?1, ?2)",
+        &[&dn.address as &ToSql, &dn.port]) {
+        Ok(n) => println!("{} rows updated", n),
+        Err(e) => println!("INSERT error: {}", e)
+    }
 }
 
 fn check_node(conn : Connection, address : String, port : usize) {
@@ -40,3 +51,12 @@ fn add_block_to_inode(conn : Connection, fname : String, blocks : usize) {
 fn get_file_inode(conn : Connection, fname : String) {
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inserts_dnode() {
+    }
+
+}
