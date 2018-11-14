@@ -16,6 +16,12 @@ struct Dnode {
     port : i32,
 }
 
+fn create_tables(conn : &Connection) {
+	conn.execute(
+    	"CREATE TABLE dnode (nid INTEGER PRIMARY KEY ASC AUTOINCREMENT, address TEXT NOT NULL DEFAULT \" \", port INTEGER NOT NULL DEFAULT \"0\")",
+    	NO_PARAMS);
+}
+
 fn add_data_node(conn : &Connection, address : &str, port : i32) {
     let dn = Dnode {
         id : 0,
@@ -55,8 +61,27 @@ fn get_file_inode(conn : Connection, fname : String) {
 mod tests {
     use super::*;
 
+    fn get_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn);
+        conn
+    }
+
     #[test]
     fn inserts_dnode() {
+        let conn = get_test_db();
+        add_data_node(&conn, "127.0.0.1", 65533);
+        let mut stmt = conn.prepare("SELECT * FROM dnode").unwrap();
+        let result = stmt.query_map(
+            NO_PARAMS, |row| Dnode {
+                id : row.get(0), address : row.get(1), port : row.get(2),
+            }).unwrap();
+        for d in result {
+            let dnode = d.unwrap();
+            assert_eq!(dnode.id, 1);
+            assert_eq!(dnode.address, "127.0.0.1");
+            assert_eq!(dnode.port, 65533);
+        }
     }
 
 }
