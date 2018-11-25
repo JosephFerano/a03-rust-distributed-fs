@@ -1,14 +1,32 @@
 extern crate a03;
 extern crate rusqlite;
-#[macro_use]
+extern crate serde;
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
-// use a03::*;
+ use a03::*;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
+use std::net::{TcpListener,TcpStream};
+use std::thread;
+use std::io::Read;
 
 fn main() {
-    let conn = Connection::open("dfs.db").unwrap();
+    let listener = TcpListener::bind("localhost:6770").unwrap();
+    println!("Binding!");
+    for stream in listener.incoming() {
+        let mut stream = stream.unwrap();
+        println!("Got here!");
+        let test_obj : TestObj = serde_json::from_reader(&mut stream).unwrap();
+        match serde_json::to_writer(
+            &mut stream,
+            &TestObj { message : String::from("I got it dude") })
+        {
+            Ok(_) => println!("{}", test_obj.message),
+            Err(e) => println!("{}", e),
+        };
+    }
 }
 
 #[derive(Debug)]
