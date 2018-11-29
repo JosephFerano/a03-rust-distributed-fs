@@ -5,50 +5,77 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
- use a03::*;
+use a03::*;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
-use std::net::{TcpListener,TcpStream};
-use std::thread;
+use std::borrow::Cow;
 use std::io::Read;
+use std::io::Write;
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::thread;
 
 fn main() {
+    let mut data_nodes: Vec<DataNode> = Vec::new();
+    let mut file_list: Vec<String> = Vec::new();
+
+    file_list.push(String::from("/"));
+    file_list.push(String::from("/home"));
+    file_list.push(String::from("/home/joe"));
+    file_list.push(String::from("/bin"));
     let listener = TcpListener::bind("localhost:6770").unwrap();
-    println!("Binding!");
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        println!("Got here!");
-        let test_obj : TestObj = serde_json::from_reader(&mut stream).unwrap();
-        match serde_json::to_writer(
-            &mut stream,
-            &TestObj { message : String::from("I got it dude") })
-        {
-            Ok(_) => println!("{}", test_obj.message),
-            Err(e) => println!("{}", e),
+        match serde_json::from_reader(&mut stream) {
+            Ok(packet @ Packet { .. }) => match packet.p_type {
+                PacketType::ListFiles => list(&mut stream, &file_list[..]),
+                PacketType::PutFiles => put(&mut stream, &packet.json.unwrap(), &mut file_list),
+                PacketType::RegisterNode =>
+                    register_node(&mut stream, &packet.json.unwrap(), &mut data_nodes),
+                _ => (),
+            },
+            Err(e) => println!("Error parsing json {}", e.to_string()),
         };
+        stream.flush().unwrap();
     }
 }
 
-#[derive(Debug)]
-struct DataNode {
-    id: i32,
-    address: String,
-    port: i32,
+fn list(stream: &mut TcpStream, files: &[String]) {
+    match serde_json::to_writer(
+        stream,
+        &FilePaths {
+            paths: Cow::from(files),
+        },
+    ) {
+        Ok(_) => println!("{}", "Sent file paths"),
+        Err(e) => println!("{}", e),
+    };
 }
 
-#[derive(Debug)]
-struct INode {
-    id: i32,
-    name: String,
-    size: i32,
+fn put(stream: &mut TcpStream, json: &String, files: &mut Vec<String>) {
+    let files: PutFiles = serde_json::from_str(json).unwrap();
+    report_success(stream);
 }
 
-#[derive(Debug)]
-struct Block {
-    id : i32,
-    file_id : i32,
-    node_id : i32,
-    c_id : String,
+fn register_node(stream: &mut TcpStream, json: &String, data_nodes: &mut Vec<DataNode>) {
+    let endpoint : RegisterNode = serde_json::from_str(json).unwrap();
+    data_nodes.push(DataNode { address: endpoint.ip, port: endpoint.port, id: 1 });
+    for dn in data_nodes {
+        println!("{:?}", dn);
+    }
+    report_success(stream);
+}
+
+fn report_success(stream: &mut TcpStream) {
+    match serde_json::to_writer(
+        stream,
+        &Packet {
+            p_type: PacketType::Success,
+            json: None,
+        },
+    ) {
+        Ok(_) => println!("{}", "Success Registering Data Node"),
+        Err(e) => println!("{}", e),
+    };
 }
 
 fn create_tables(conn: &Connection) {
@@ -96,23 +123,20 @@ fn check_node(conn: &Connection, address: &str, port: i32) -> DataNode {
     let mut stmt = conn
         .prepare("SELECT nid, address, port FROM dnode WHERE address=?1 AND port=?2")
         .unwrap();
-    stmt.query_row(
-        &[&address as &ToSql, &port],
-        |row| DataNode {
-            id: row.get(0),
-            address: row.get(1),
-            port: row.get(2),
-        })
-        .unwrap()
+    stmt.query_row(&[&address as &ToSql, &port], |row| DataNode {
+        id: row.get(0),
+        address: row.get(1),
+        port: row.get(2),
+    }).unwrap()
 }
 
- fn get_data_nodes(conn: &Connection) {
-     let mut stmt = conn.prepare("SELECT address, port FROM dnode WHERE 1");
- }
+fn get_data_nodes(conn: &Connection) {
+    let mut stmt = conn.prepare("SELECT address, port FROM dnode WHERE 1");
+}
 
- fn insert_file(conn: &Connection, fname: String, fsize: usize) {
-     let mut stmt = conn.prepare("INSERT INTO inode (fname, fsize) VALUES (\"?1\", ?2)");
- }
+fn insert_file(conn: &Connection, fname: String, fsize: usize) {
+    let mut stmt = conn.prepare("INSERT INTO inode (fname, fsize) VALUES (\"?1\", ?2)");
+}
 
 // fn get_file_info(conn: &Connection, fname: String) {}
 
@@ -142,5 +166,4 @@ mod tests {
         assert_eq!(dnode.address, ip);
         assert_eq!(dnode.port, 65533);
     }
-
 }
