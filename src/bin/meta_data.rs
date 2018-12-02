@@ -2,17 +2,14 @@ extern crate a03;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
 extern crate serde_derive;
 
 use a03::*;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
 use std::borrow::Cow;
-use std::io::Read;
 use std::io::Write;
-use std::net::{Shutdown, TcpListener, TcpStream};
-use std::thread;
+use std::net::{TcpListener, TcpStream};
 
 fn main() {
     let mut data_nodes: Vec<DataNode> = Vec::new();
@@ -29,8 +26,8 @@ fn main() {
             Ok(packet @ Packet { .. }) => match packet.p_type {
                 PacketType::ListFiles => list(&mut stream, &file_list[..]),
                 PacketType::PutFiles => put(&mut stream, &packet.json.unwrap(), &mut file_list),
-                PacketType::RegisterNode =>
-                    register_node(&mut stream, &packet.json.unwrap(), &mut data_nodes),
+                PacketType::NodeRegistration =>
+                    node_registration(&mut stream, &packet.json.unwrap(), &mut data_nodes),
                 _ => (),
             },
             Err(e) => println!("Error parsing json {}", e.to_string()),
@@ -53,19 +50,35 @@ fn list(stream: &mut TcpStream, files: &[String]) {
 
 fn put(stream: &mut TcpStream, json: &String, files: &mut Vec<String>) {
     let files: PutFiles = serde_json::from_str(json).unwrap();
-    report_success(stream);
+    report_success(stream, "Successfully Put Files");
 }
 
-fn register_node(stream: &mut TcpStream, json: &String, data_nodes: &mut Vec<DataNode>) {
-    let endpoint : RegisterNode = serde_json::from_str(json).unwrap();
-    data_nodes.push(DataNode { address: endpoint.ip, port: endpoint.port, id: 1 });
+fn node_registration(stream: &mut TcpStream, json: &String, data_nodes: &mut Vec<DataNode>) {
+    let endpoint : NodeRegistration = serde_json::from_str(json).unwrap();
+    let message = if endpoint.register {
+        data_nodes.push(DataNode { ip: endpoint.ip, port: endpoint.port, id: 1 });
+        "You were successfully registering"
+    }
+    else {
+        match data_nodes.iter()
+            .position(|dn| dn.ip == endpoint.ip && dn.port == endpoint.port) {
+            Some(index) => {
+                data_nodes.remove(index);
+                "You were successfully unregistering"
+            },
+            None => {
+                println!("Data Node at {}:{} does not exit", endpoint.ip, endpoint.port);
+                "You weren't found"
+            }
+        }
+    };
     for dn in data_nodes {
         println!("{:?}", dn);
     }
-    report_success(stream);
+    report_success(stream, message);
 }
 
-fn report_success(stream: &mut TcpStream) {
+fn report_success(stream: &mut TcpStream, message: &str) {
     match serde_json::to_writer(
         stream,
         &Packet {
@@ -73,7 +86,7 @@ fn report_success(stream: &mut TcpStream) {
             json: None,
         },
     ) {
-        Ok(_) => println!("{}", "Success Registering Data Node"),
+        Ok(_) => println!("{}", message),
         Err(e) => println!("{}", e),
     };
 }
@@ -125,7 +138,7 @@ fn check_node(conn: &Connection, address: &str, port: i32) -> DataNode {
         .unwrap();
     stmt.query_row(&[&address as &ToSql, &port], |row| DataNode {
         id: row.get(0),
-        address: row.get(1),
+        ip: row.get(1),
         port: row.get(2),
     }).unwrap()
 }

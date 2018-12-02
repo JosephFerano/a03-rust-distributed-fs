@@ -1,0 +1,2 @@
+if [ -z "$1" ]; then echo Requires port argument. Exiting; exit 1; fi
+echo '{"p_type":"ShutdownDataNode","json":null}' | nc -v -N localhost $1

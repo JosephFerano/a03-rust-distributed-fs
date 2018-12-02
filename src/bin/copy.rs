@@ -9,5 +9,11 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
 use std::io::Read;
 use std::io::Write;
+use std::fs::File;
+use std::fs;
 
-fn main() {}
+fn main() {
+    let mut file = fs::read("dfs.db").unwrap();
+    let mut copy = File::create("copy").unwrap();
+    copy.write_all(&file[..]).unwrap();
+}
