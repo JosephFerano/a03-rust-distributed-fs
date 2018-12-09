@@ -70,7 +70,6 @@ pub struct Block {
 
 #[derive(Debug)]
 pub struct BlockQuery {
-    pub id: u32,
     pub data_node: DataNode,
     pub chunk_id: String
 }
