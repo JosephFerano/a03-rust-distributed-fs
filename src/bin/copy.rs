@@ -13,7 +13,9 @@ use std::fs::File;
 use std::fs;
 
 fn main() {
-    let mut file = fs::read("dfs.db").unwrap();
-    let mut copy = File::create("copy").unwrap();
-    copy.write_all(&file[..]).unwrap();
+    let mut file = fs::read("/home/joe/Downloads/ideaIU-2018.3.tar.gz").unwrap();
+    let mut stream = TcpStream::connect("localhost:6771").unwrap();
+    stream.write(&file).unwrap();
+    stream.flush().unwrap();
+    stream.shutdown(Shutdown::Write).unwrap();
 }

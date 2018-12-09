@@ -10,20 +10,33 @@ use std::thread;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpListener;
+use std::fs::File;
 
 
 fn main() {
-    register_with_meta_server();
+//    register_with_meta_server();
     let listener = TcpListener::bind("localhost:6771").unwrap();
+
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        match serde_json::from_reader(&mut stream) {
-            Ok(packet @ Packet { .. }) => match packet.p_type {
-                PacketType::ShutdownDataNode => shutdown(&mut stream),
-                _ => (),
+        let mut buf = Vec::new();
+        match stream.read_to_end(&mut buf) {
+            Ok(size) => {
+                println!("Total bytes: {}", size);
+                let mut copy = File::create("new_version").unwrap();
+                copy.write_all(&buf[..]).unwrap();
             },
-            Err(e) => println!("Error parsing json {}", e.to_string()),
-        };
+            Err(e) => println!("{}", e),
+        }
+//        match serde_json::from_reader(&mut stream) {
+//            Ok(packet @ Packet { .. }) => match packet.p_type {
+//                PacketType::GetFiles => shutdown(&mut stream),
+//                PacketType::PutFiles => put(&mut stream, &packet.json.unwrap(), &mut Vec::new()),
+//                PacketType::ShutdownDataNode => shutdown(&mut stream),
+//                _ => (),
+//            },
+//            Err(e) => println!("Error parsing json {}", e.to_string()),
+//        };
     }
 }
 
@@ -42,6 +55,10 @@ fn register_with_meta_server() {
     stream.shutdown(Shutdown::Write).unwrap();
     let result: Packet = serde_json::from_reader(&mut stream).unwrap();
     println!("{:?}", result);
+}
+
+fn put(stream: &mut TcpStream, json: &String, files: &mut Vec<String>) {
+    let files: PutFiles = serde_json::from_str(json).unwrap();
 }
 
 fn shutdown(stream: &mut TcpStream) {
