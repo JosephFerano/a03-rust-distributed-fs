@@ -3,6 +3,7 @@ extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_derive;
+extern crate uuid;
 
 use a03::*;
 use rusqlite::types::ToSql;
@@ -22,14 +23,35 @@ fn main() {
             Ok(packet @ Packet { .. }) => match packet.p_type {
                 PacketType::ListFiles => list(&mut stream, &conn),
                 PacketType::NodeRegistration =>
-                    node_registration(&mut stream, &packet.json.unwrap(), &conn),
-//                PacketType::AddFile =>
+                    node_registration(&mut stream, &conn, &packet.json.unwrap()),
+                PacketType::PutFile =>
+                    put_file(&mut stream, &conn, &packet.json.unwrap()),
                 _ => (),
             },
             Err(e) => println!("Error parsing json {}", e.to_string()),
         };
         stream.flush().unwrap();
     }
+}
+
+fn put_file(stream: &mut TcpStream, conn: &Connection, message: &str) {
+    let file : PutFile = serde_json::from_str(message).unwrap();
+    add_file(&conn, &file.name, file.size as i32);
+    let mut nodes: Vec<AvailableNodes> = Vec::new();
+    for dn in get_data_nodes(&conn) {
+        nodes.push(AvailableNodes {
+            ip: dn.ip,
+            port: dn.port,
+            chunk_id: uuid::Uuid::new_v4().to_string(),
+        });
+    }
+    match serde_json::to_writer(
+        stream,
+        &nodes
+    ) {
+        Ok(_) => println!("{}", "Sent nodes with chunks"),
+        Err(e) => println!("{}", e),
+    };
 }
 
 fn list(stream: &mut TcpStream, conn: &Connection) {
@@ -44,7 +66,7 @@ fn list(stream: &mut TcpStream, conn: &Connection) {
     };
 }
 
-fn node_registration(stream: &mut TcpStream, json: &String, conn: &Connection) {
+fn node_registration(stream: &mut TcpStream, conn: &Connection, json: &String) {
     let endpoint : NodeRegistration = serde_json::from_str(json).unwrap();
     let message = if endpoint.register {
         // TODO: We probably should check if the endpoint already exists!
@@ -74,7 +96,8 @@ fn report_success(stream: &mut TcpStream, message: &str) {
 
 fn add_data_node(conn: &Connection, address: &str, port: i32) {
     match conn.execute(
-        "INSERT INTO dnode (address, port) VALUES (?1, ?2)",
+        "INSERT OR REPLACE INTO dnode (nid, address, port)
+VALUES ((SELECT nid FROM dnode WHERE address = ?1 AND port = ?2), ?1, ?2)",
         &[&address as &ToSql, &port],
     ) {
         Ok(n) => println!("{} rows updated", n),
@@ -82,14 +105,14 @@ fn add_data_node(conn: &Connection, address: &str, port: i32) {
     };
 }
 
-fn remove_data_node(conn: &Connection, address: &str, port: i32) {
+fn remove_data_node(conn: &Connection, address: &str, port: i32) -> bool {
     match conn.execute(
         "DELETE FROM dnode WHERE address=?1 AND port=?2",
         &[&address as &ToSql, &port],
     ) {
-        Ok(n) => println!("{} rows updated", n),
-        Err(e) => println!("DELETE error: {}", e),
-    };
+        Ok(n) => n > 0,
+        Err(_) => false,
+    }
 }
 
 fn get_data_node(conn: &Connection, address: &str, port: i32) -> Option<DataNode> {
@@ -120,7 +143,8 @@ fn get_data_nodes(conn: &Connection) -> Vec<DataNode> {
 
 fn add_file(conn: &Connection, fname: &String, fsize: i32) {
     conn.execute(
-        "INSERT INTO inode (fname, fsize) VALUES (?1, ?2)",
+        "INSERT OR REPLACE INTO inode (fid, fname, fsize)
+VALUES ((SELECT fid FROM inode WHERE fname = ?1), ?1, ?2)",
         &[&fname as &ToSql, &fsize])
         .unwrap();
 }
@@ -250,6 +274,13 @@ cid TEXT NOT NULL DEFAULT \"0\")",
     }
 
     #[test]
+    fn returns_false_dnode_if_it_doesnt_exist() {
+        let conn = get_test_db();
+        let removed = remove_data_node(&conn, "127.0.0.1", 65533);
+        assert_eq!(removed, false);
+    }
+
+    #[test]
     fn gets_all_data_nodes() {
         let conn = get_test_db();
         let ip1 = "127.0.0.1";
@@ -271,12 +302,44 @@ cid TEXT NOT NULL DEFAULT \"0\")",
     }
 
     #[test]
+    fn adds_node_multiple_times_but_id_doesnt_change() {
+        let conn = get_test_db();
+        let ip = "127.0.0.1";
+        let port = 65533;
+        add_data_node(&conn, &ip, port);
+        add_data_node(&conn, &ip, port);
+        add_data_node(&conn, &ip, port);
+        let ds = get_data_nodes(&conn);
+        assert_eq!(ds.len(), 1);
+        let dn = get_data_node(&conn, ip, port).unwrap();
+        assert_eq!(dn.id, 1);
+        assert_eq!(dn.ip, ip);
+        assert_eq!(dn.port, port as u32);
+    }
+
+    #[test]
     fn adds_file() {
         let conn = get_test_db();
         add_file(&conn, &String::from("my_1337_virus"), 32);
         let files = get_files(&conn);
         assert_eq!(files.len(), 1);
         assert_eq!(files[0], "my_1337_virus 32 bytes");
+    }
+
+    #[test]
+    fn adds_file_multiple_times_but_id_doesnt_change() {
+        let conn = get_test_db();
+        let fname = String::from("my_1337_virus");
+        add_file(&conn, &fname, 32);
+        add_file(&conn, &fname, 32);
+        add_file(&conn, &fname, 32);
+        add_file(&conn, &fname, 32);
+        let files = get_files(&conn);
+        assert_eq!(files.len(), 1);
+        let file = get_file_info(&conn, &fname);
+        assert_eq!(file.id, 1);
+        assert_eq!(file.name, "my_1337_virus");
+        assert_eq!(file.size, 32);
     }
 
     #[test]

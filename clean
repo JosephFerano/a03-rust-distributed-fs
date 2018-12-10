@@ -1,0 +1,1 @@
+rm dfs.db && python dfs_skel/createdb.py

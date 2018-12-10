@@ -14,29 +14,29 @@ use std::fs::File;
 
 
 fn main() {
-//    register_with_meta_server();
+    register_with_meta_server();
     let listener = TcpListener::bind("localhost:6771").unwrap();
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let mut buf = Vec::new();
-        match stream.read_to_end(&mut buf) {
-            Ok(size) => {
-                println!("Total bytes: {}", size);
-                let mut copy = File::create("new_version").unwrap();
-                copy.write_all(&buf[..]).unwrap();
-            },
-            Err(e) => println!("{}", e),
-        }
-//        match serde_json::from_reader(&mut stream) {
-//            Ok(packet @ Packet { .. }) => match packet.p_type {
-//                PacketType::GetFiles => shutdown(&mut stream),
-//                PacketType::PutFiles => put(&mut stream, &packet.json.unwrap(), &mut Vec::new()),
-//                PacketType::ShutdownDataNode => shutdown(&mut stream),
-//                _ => (),
+//        let mut buf = Vec::new();
+//        match stream.read_to_end(&mut buf) {
+//            Ok(size) => {
+//                println!("Total bytes: {}", size);
+//                let mut copy = File::create("new_version").unwrap();
+//                copy.write_all(&buf[..]).unwrap();
 //            },
-//            Err(e) => println!("Error parsing json {}", e.to_string()),
-//        };
+//            Err(e) => println!("{}", e),
+//        }
+        match serde_json::from_reader(&mut stream) {
+            Ok(packet @ Packet { .. }) => match packet.p_type {
+//                PacketType::GetFiles => shutdown(&mut stream),
+//                PacketType::PutFile => put(&mut stream, &packet.json.unwrap(), &mut Vec::new()),
+                PacketType::ShutdownDataNode => shutdown(&mut stream),
+                _ => (),
+            },
+            Err(e) => println!("Error parsing json: {}", e.to_string()),
+        };
     }
 }
 
@@ -47,7 +47,7 @@ fn register_with_meta_server() {
         &Packet {
             p_type: PacketType::NodeRegistration,
             json: Some(serde_json::to_string(
-                &NodeRegistration { register: true, ip: String::from("localhost"), port: 6770 }).unwrap()),
+                &NodeRegistration { register: true, ip: String::from("localhost"), port: 6771 }).unwrap()),
         })
         .unwrap();
     println!("Registered myself");
@@ -57,9 +57,9 @@ fn register_with_meta_server() {
     println!("{:?}", result);
 }
 
-fn put(stream: &mut TcpStream, json: &String, files: &mut Vec<String>) {
-    let files: PutFiles = serde_json::from_str(json).unwrap();
-}
+//fn put(stream: &mut TcpStream, json: &String, files: &mut Vec<String>) {
+//    let files: PutFiles = serde_json::from_str(json).unwrap();
+//}
 
 fn shutdown(stream: &mut TcpStream) {
     let mut stream = TcpStream::connect("localhost:6770").unwrap();
@@ -68,7 +68,7 @@ fn shutdown(stream: &mut TcpStream) {
         &Packet {
             p_type: PacketType::NodeRegistration,
             json: Some(serde_json::to_string(
-                &NodeRegistration { register: false, ip: String::from("localhost"), port: 6770 }).unwrap()),
+                &NodeRegistration { register: false, ip: String::from("localhost"), port: 6771 }).unwrap()),
         })
         .unwrap();
     println!("Unregistered myself");

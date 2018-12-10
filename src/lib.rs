@@ -10,10 +10,10 @@ use std::net::Ipv4Addr;
 pub enum PacketType {
     NodeRegistration,
     ListFiles,
-    AddFile,
-    PutFiles,
+    PutFile,
     GetFiles,
     AddDataBlocks,
+    ShutdownDataNode,
     Success,
 }
 
@@ -36,8 +36,16 @@ pub struct NodeRegistration {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PutFiles {
-    pub files: Vec<String>
+pub struct PutFile {
+    pub name: String,
+    pub size: u32
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AvailableNodes {
+    pub ip: String,
+    pub port: u32,
+    pub chunk_id: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
