@@ -16,7 +16,7 @@ pub enum PacketType {
     NodeRegistration,
     ListFiles,
     PutFile,
-    GetFiles,
+    GetFile,
     AddDataBlocks,
     ShutdownDataNode,
     Success,

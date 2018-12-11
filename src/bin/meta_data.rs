@@ -37,6 +37,9 @@ fn main() {
 fn put_file(stream: &mut TcpStream, conn: &Connection, message: &str) {
     let file : PutFile = serde_json::from_str(message).unwrap();
     add_file(&conn, &file.name, file.size as i32);
+    let mut blocks: Vec<Block> = Vec::new();
+    // Divide the blocks up into the amount of nodes available
+    add_blocks_to_inode(&conn, &file.name, &blocks);
     let mut nodes: Vec<AvailableNodes> = Vec::new();
     for dn in get_data_nodes(&conn) {
         nodes.push(AvailableNodes {
