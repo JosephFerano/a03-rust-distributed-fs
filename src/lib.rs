@@ -5,6 +5,11 @@ extern crate serde_derive;
 
 use std::borrow::Cow;
 use std::net::Ipv4Addr;
+use std::net::SocketAddrV4;
+use std::str::FromStr;
+//use std::
+
+const DEFAULT_PORT: &str = "8000";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum PacketType {
@@ -81,3 +86,15 @@ pub struct BlockQuery {
     pub data_node: DataNode,
     pub chunk_id: String
 }
+
+pub fn parse_endpoint_from_cli(arg_index : usize) -> String {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let endpoint_arg: String = args.get(arg_index).expect("No IP provided").clone();
+
+    if endpoint_arg.contains(":") {
+        endpoint_arg
+    } else {
+        format!("{}:{}", endpoint_arg, DEFAULT_PORT)
+    }
+}
+
