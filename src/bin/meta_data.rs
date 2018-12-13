@@ -397,6 +397,7 @@ cid TEXT NOT NULL DEFAULT \"0\")",
         add_file(&conn, &filename, 128);
         add_data_node(&conn, "127.0.0.1", 1337);
         add_data_node(&conn, "127.0.0.2", 1338);
+        add_data_node(&conn, "127.0.0.2", 1339);
         let inode = get_file_info(&conn, &filename);
         let blocks = vec!(
             Block {
@@ -411,12 +412,18 @@ cid TEXT NOT NULL DEFAULT \"0\")",
                 node_id: 2,
                 chunk_id: String::from("c2"),
             },
+            Block {
+                file_id: inode.id,
+                id: 0,
+                node_id: 3,
+                chunk_id: String::from("c3"),
+            },
         );
         add_blocks_to_inode(&conn, &filename, &blocks);
         let (inode, blocks) = get_file_inode(&conn, &filename);
         assert_eq!(inode.name, "main_file");
         assert_eq!(inode.size, 128);
-        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].chunk_id, "c1");
         assert_eq!(blocks[0].data_node.id, 1);
         assert_eq!(blocks[0].data_node.ip, "127.0.0.1");
@@ -425,6 +432,10 @@ cid TEXT NOT NULL DEFAULT \"0\")",
         assert_eq!(blocks[1].data_node.id, 2);
         assert_eq!(blocks[1].data_node.ip, "127.0.0.2");
         assert_eq!(blocks[1].data_node.port, 1338);
+        assert_eq!(blocks[2].chunk_id, "c3");
+        assert_eq!(blocks[2].data_node.id, 3);
+        assert_eq!(blocks[2].data_node.ip, "127.0.0.2");
+        assert_eq!(blocks[2].data_node.port, 1339);
     }
 
 }
