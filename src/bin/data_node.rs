@@ -6,16 +6,13 @@ extern crate serde_derive;
 
 use a03::*;
 use std::net::{TcpStream, Shutdown};
-use std::thread;
-use std::io::Read;
 use std::io::Write;
 use std::net::TcpListener;
-use std::fs::File;
-
 
 fn main() {
+    let endpoint = parse_endpoint_from_cli(0);
+    let listener = TcpListener::bind(endpoint).unwrap();
     register_with_meta_server();
-    let listener = TcpListener::bind("localhost:6771").unwrap();
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();

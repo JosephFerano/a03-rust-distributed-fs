@@ -11,26 +11,28 @@ use std::fs;
 
 fn main() {
     let args = get_cli_args();
+    let file = fs::read(args.filename).expect("File not found!");
+    let size = file.len();
     let mut stream = TcpStream::connect(args.endpoint).unwrap();
+    let packet_type;
+    let json;
     if args.is_copy_to_dfs {
-        serde_json::to_writer(
-            &mut stream,
-            &Packet {
-                p_type: PacketType::GetFile,
-                json: Some(serde_json::to_string(
-                    &PutFile { name: args.filepath, size: 32 }).unwrap()),
+        packet_type = PacketType::PutFile;
+        json = Some(serde_json::to_string(
+            &PutFile {
+                name: args.filepath,
+                size: size as u32,
             })
-            .unwrap();
+            .unwrap())
     } else {
-        serde_json::to_writer(
-            &mut stream,
-            &Packet {
-                p_type: PacketType::PutFile,
-                json: Some(serde_json::to_string(
-                    &PutFile { name: args.filepath, size: 32 }).unwrap()),
+        packet_type = PacketType::GetFile;
+        json = Some(serde_json::to_string(
+            &GetFile {
             })
-            .unwrap();
+            .unwrap())
     }
+    serde_json::to_writer( &mut stream, &Packet { p_type: packet_type, json, })
+        .unwrap();
     println!("Sent file");
     stream.flush().unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
@@ -40,7 +42,6 @@ fn main() {
         println!("Chunk ID: {}", f.chunk_id);
     }
 
-    let mut file = fs::read(args.filename).expect("File not found!");
     println!("{} bytes", file.len());
 //    let mut stream = TcpStream::connect("localhost:6771").unwrap();
 //    stream.write(&file).unwrap();
@@ -61,33 +62,30 @@ pub fn get_cli_args() -> CliArgs {
     if args.len() < 2 {
         panic!("Requires 2 arguments; IP:PORT:FILEPATH and a Local filename/filepath")
     }
-    let endpoint_arg: String = args.get(0).unwrap().clone();
+    let mut endpoint_arg: String = args.get(0).unwrap().clone();
 
     let endpoint;
     let filepath;
     let filename;
-    let is_copy_to_dfs;
+    let splits: Vec<&str>;
 
-    if endpoint_arg.contains(":") {
-        let splits: Vec<&str> = endpoint_arg.split(':').collect();
+    let is_copy_to_dfs = endpoint_arg.contains(":");
+    if is_copy_to_dfs {
+        splits = endpoint_arg.split(':').collect();
         if splits.len() < 3 {
             panic!("Incorrect endpoint argument format! Please provide IP:PORT:FILE");
         }
-        endpoint = format!("{}:{}", splits[0], splits[1]);
-        filepath = String::from(splits[2]);
         filename = args.get(1).unwrap().clone();
-        is_copy_to_dfs = true;
     } else {
-        let endpoint_arg: String = args.get(1).unwrap().clone();
-        let splits: Vec<&str> = endpoint_arg.split(':').collect();
+        endpoint_arg = args.get(1).unwrap().clone();
+        splits = endpoint_arg.split(':').collect();
         if splits.len() < 3 {
             panic!("Incorrect endpoint argument format! Please provide IP:PORT:FILE");
         }
-        endpoint = format!("{}:{}", splits[0], splits[1]);
-        filepath = String::from(splits[2]);
         filename = args.get(0).unwrap().clone();
-        is_copy_to_dfs = false;
     }
+    endpoint = format!("{}:{}", splits[0], splits[1]);
+    filepath = String::from(splits[2]);
 
     CliArgs { endpoint, filepath, filename, is_copy_to_dfs }
 }

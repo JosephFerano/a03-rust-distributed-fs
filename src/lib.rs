@@ -7,7 +7,6 @@ use std::borrow::Cow;
 use std::net::Ipv4Addr;
 use std::net::SocketAddrV4;
 use std::str::FromStr;
-//use std::
 
 const DEFAULT_PORT: &str = "8000";
 
@@ -17,6 +16,8 @@ pub enum PacketType {
     ListFiles,
     PutFile,
     GetFile,
+    RequestRead,
+    RequestWrite,
     AddDataBlocks,
     ShutdownDataNode,
     Success,
@@ -54,7 +55,7 @@ pub struct AvailableNodes {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GetFiles {}
+pub struct GetFile {}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddDataBlocks {}

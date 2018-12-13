@@ -24,8 +24,10 @@ fn main() {
                 PacketType::ListFiles => list(&mut stream, &conn),
                 PacketType::NodeRegistration =>
                     node_registration(&mut stream, &conn, &packet.json.unwrap()),
-                PacketType::PutFile =>
-                    put_file(&mut stream, &conn, &packet.json.unwrap()),
+                PacketType::RequestRead =>
+                    request_read(&mut stream, &conn, &packet.json.unwrap()),
+                PacketType::RequestWrite =>
+                    request_write(&mut stream, &conn, &packet.json.unwrap()),
                 _ => (),
             },
             Err(e) => println!("Error parsing json {}", e.to_string()),
@@ -34,36 +36,56 @@ fn main() {
     }
 }
 
-fn put_file(stream: &mut TcpStream, conn: &Connection, message: &str) {
+fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
     let file : PutFile = serde_json::from_str(message).unwrap();
     add_file(&conn, &file.name, file.size as i32);
-    let mut blocks: Vec<Block> = Vec::new();
-    // Divide the blocks up into the amount of nodes available
-    add_blocks_to_inode(&conn, &file.name, &blocks);
+    let (inode, blocks) = get_file_inode(&conn, &file.name);
     let mut nodes: Vec<AvailableNodes> = Vec::new();
-    for dn in get_data_nodes(&conn) {
+    for b in blocks {
         nodes.push(AvailableNodes {
-            ip: dn.ip,
-            port: dn.port,
-            chunk_id: uuid::Uuid::new_v4().to_string(),
+            ip: b.data_node.ip,
+            port: b.data_node.port,
+            chunk_id: b.chunk_id,
         });
     }
-    match serde_json::to_writer(
-        stream,
-        &nodes
-    ) {
+    match serde_json::to_writer( stream, &nodes) {
+        Ok(_) => println!("{}", "Sent nodes with chunks"),
+        Err(e) => println!("{}", e),
+    };
+}
+
+fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
+    let file : PutFile = serde_json::from_str(message).unwrap();
+    add_file(&conn, &file.name, file.size as i32);
+    // TODO: Need to ensure that replaces also work
+    let fid = conn.last_insert_rowid();
+    let mut blocks: Vec<Block> = Vec::new();
+    let mut nodes: Vec<AvailableNodes> = Vec::new();
+    let dnodes = get_data_nodes(&conn);
+    for i in 0..dnodes.len() {
+        let dn = &dnodes[i];
+        let uuid = uuid::Uuid::new_v4().to_string();
+        blocks.push(Block {
+            chunk_id: uuid.clone(),
+            node_id: dn.id,
+            file_id: fid as u32,
+            id: 0,
+        });
+        nodes.push(AvailableNodes {
+            ip: dn.ip.clone(),
+            port: dn.port,
+            chunk_id: uuid.clone(),
+        });
+    }
+    add_blocks_to_inode(&conn, &file.name, &blocks);
+    match serde_json::to_writer(stream, &nodes) {
         Ok(_) => println!("{}", "Sent nodes with chunks"),
         Err(e) => println!("{}", e),
     };
 }
 
 fn list(stream: &mut TcpStream, conn: &Connection) {
-    match serde_json::to_writer(
-        stream,
-        &FilePaths {
-            paths: Cow::from(get_files(&conn)),
-        },
-    ) {
+    match serde_json::to_writer(stream, &FilePaths { paths: Cow::from(get_files(&conn)), }) {
         Ok(_) => println!("{}", "Sent file paths"),
         Err(e) => println!("{}", e),
     };
@@ -85,13 +107,7 @@ fn node_registration(stream: &mut TcpStream, conn: &Connection, json: &String) {
 }
 
 fn report_success(stream: &mut TcpStream, message: &str) {
-    match serde_json::to_writer(
-        stream,
-        &Packet {
-            p_type: PacketType::Success,
-            json: None,
-        },
-    ) {
+    match serde_json::to_writer(stream, &Packet { p_type: PacketType::Success, json: None, }) {
         Ok(_) => println!("{}", message),
         Err(e) => println!("{}", e),
     };
