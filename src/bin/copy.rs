@@ -17,32 +17,45 @@ fn main() {
     let packet_type;
     let json;
     if args.is_copy_to_dfs {
-        packet_type = PacketType::PutFile;
+        packet_type = PacketType::RequestWrite;
+        println!("Requesting Write of {}", args.filepath);
         json = Some(serde_json::to_string(
-            &PutFile {
-                name: args.filepath,
-                size: size as u32,
-            })
-            .unwrap())
+            &PutFile { name: args.filepath, size: size as u32, }).unwrap())
     } else {
-        packet_type = PacketType::GetFile;
+        packet_type = PacketType::RequestRead;
+        println!("Requesting Read of {}", args.filepath);
         json = Some(serde_json::to_string(
-            &GetFile {
-            })
-            .unwrap())
+            &GetFile { name: args.filepath, }).unwrap())
     }
     serde_json::to_writer( &mut stream, &Packet { p_type: packet_type, json, })
         .unwrap();
-    println!("Sent file");
     stream.flush().unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
 
-    let files: Vec<AvailableNodes> = serde_json::from_reader(&mut stream).unwrap();
-    for f in files {
-        println!("Chunk ID: {}", f.chunk_id);
-    }
+    match serde_json::from_reader(&mut stream) {
+        Ok(packet @ Packet { .. }) => match packet.p_type {
+            PacketType::Success => {
+                let nodes = serde_json::from_str::<Vec<AvailableNodes>>(&packet.json.unwrap())
+                    .unwrap();
+                for node in nodes {
+                    println!("{}", node.chunk_id);
+                }
+            },
+            PacketType::Error => {
+                let unwrapped = &packet.json.unwrap();
+                panic!("Meta Data Server Error: {}", unwrapped);
+            },
+            _ => (),
+        },
+        Err(e) => println!("Error parsing json {}", e.to_string()),
+    };
 
-    println!("{} bytes", file.len());
+
+//    let files: Vec<AvailableNodes> = serde_json::from_reader(&mut stream).unwrap();
+//    for f in files {
+//        println!("Chunk ID: {}", f.chunk_id);
+//    }
+//    println!("{} bytes", file.len());
 //    let mut stream = TcpStream::connect("localhost:6771").unwrap();
 //    stream.write(&file).unwrap();
 //    stream.flush().unwrap();
@@ -64,25 +77,27 @@ pub fn get_cli_args() -> CliArgs {
     }
     let mut endpoint_arg: String = args.get(0).unwrap().clone();
 
+    println!("Endpoint Arg {}", endpoint_arg);
+
     let endpoint;
     let filepath;
     let filename;
     let splits: Vec<&str>;
 
-    let is_copy_to_dfs = endpoint_arg.contains(":");
+    let is_copy_to_dfs = !endpoint_arg.contains(":");
     if is_copy_to_dfs {
-        splits = endpoint_arg.split(':').collect();
-        if splits.len() < 3 {
-            panic!("Incorrect endpoint argument format! Please provide IP:PORT:FILE");
-        }
-        filename = args.get(1).unwrap().clone();
-    } else {
         endpoint_arg = args.get(1).unwrap().clone();
         splits = endpoint_arg.split(':').collect();
         if splits.len() < 3 {
             panic!("Incorrect endpoint argument format! Please provide IP:PORT:FILE");
         }
         filename = args.get(0).unwrap().clone();
+    } else {
+        splits = endpoint_arg.split(':').collect();
+        if splits.len() < 3 {
+            panic!("Incorrect endpoint argument format! Please provide IP:PORT:FILE");
+        }
+        filename = args.get(1).unwrap().clone();
     }
     endpoint = format!("{}:{}", splits[0], splits[1]);
     filepath = String::from(splits[2]);

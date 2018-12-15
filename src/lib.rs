@@ -21,6 +21,7 @@ pub enum PacketType {
     AddDataBlocks,
     ShutdownDataNode,
     Success,
+    Error,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,7 +56,9 @@ pub struct AvailableNodes {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GetFile {}
+pub struct GetFile {
+    pub name: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddDataBlocks {}
