@@ -19,6 +19,7 @@ fn main() {
         &Packet {
             p_type: PacketType::ListFiles,
             json: None,
+            data: None,
         })
         .unwrap();
     stream.flush().unwrap();

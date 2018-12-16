@@ -6,12 +6,13 @@ extern crate serde_derive;
 
 use a03::*;
 use std::net::{TcpStream, Shutdown};
-use std::io::Write;
+use std::io::{Write, Read};
+use std::fs::File;
 use std::fs;
 
 fn main() {
     let args = get_cli_args();
-    let file = fs::read(args.filename).expect("File not found!");
+    let file = fs::read(&args.filename).expect("File not found!");
     let size = file.len();
     let mut stream = TcpStream::connect(args.endpoint).unwrap();
     let packet_type;
@@ -20,46 +21,55 @@ fn main() {
         packet_type = PacketType::RequestWrite;
         println!("Requesting Write of {}", args.filepath);
         json = Some(serde_json::to_string(
-            &PutFile { name: args.filepath, size: size as u32, }).unwrap())
+            &AddFile { name: args.filepath, size: size as u32, }).unwrap())
     } else {
         packet_type = PacketType::RequestRead;
         println!("Requesting Read of {}", args.filepath);
-        json = Some(serde_json::to_string(
-            &GetFile { name: args.filepath, }).unwrap())
+        json = Some(serde_json::to_string::<String>(&args.filepath).unwrap())
     }
-    serde_json::to_writer( &mut stream, &Packet { p_type: packet_type, json, })
+    serde_json::to_writer( &mut stream, &Packet { p_type: packet_type, json, data: None, })
         .unwrap();
     stream.flush().unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
 
+    let mut nodes: Option<Vec<AvailableNodes>> = None;
     match serde_json::from_reader(&mut stream) {
-        Ok(packet @ Packet { .. }) => match packet.p_type {
-            PacketType::Success => {
-                let nodes = serde_json::from_str::<Vec<AvailableNodes>>(&packet.json.unwrap())
-                    .unwrap();
-                for node in nodes {
-                    println!("{}", node.chunk_id);
-                }
-            },
-            PacketType::Error => {
-                let unwrapped = &packet.json.unwrap();
-                panic!("Meta Data Server Error: {}", unwrapped);
-            },
-            _ => (),
+        Ok(Packet { p_type: PacketType::Success, json, .. }) =>
+            nodes = Some(serde_json::from_str::<Vec<AvailableNodes>>(&json.unwrap())
+                .unwrap()),
+        Ok(Packet { p_type: PacketType::Error, json, .. }) => {
+            eprintln!("Meta Data Server Error: {}", &json.unwrap());
         },
-        Err(e) => println!("Error parsing json {}", e.to_string()),
+        Ok(_) => {},
+        Err(e) => eprintln!("Error parsing json {}", e.to_string()),
     };
+    let filename = &args.filename;
+    if args.is_copy_to_dfs {
+        nodes.map(|ns| send_file_to_data_nodes(&filename, &ns, &file));
+    } else {
+        nodes.map(|ns| get_file_from_data_nodes(&ns));
+    }
+}
 
+fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file: &Vec<u8>) {
+    let mut stream = TcpStream::connect("localhost:6771").unwrap();
+    println!("Going to send a file! Bytes {}", file.len());
+    let chunk = Chunk {
+        id: nodes[0].chunk_id.clone(),
+        filename: filename.clone(),
+    };
+    let packet = serde_json::to_writer(
+        &mut stream,
+        &Packet {
+            p_type: PacketType::PutFile,
+            json: Some(serde_json::to_string(&chunk).unwrap()),
+            data: Some(file.clone()),
+        }).unwrap();
+    stream.flush().unwrap();
+    stream.shutdown(Shutdown::Write).unwrap();
+}
 
-//    let files: Vec<AvailableNodes> = serde_json::from_reader(&mut stream).unwrap();
-//    for f in files {
-//        println!("Chunk ID: {}", f.chunk_id);
-//    }
-//    println!("{} bytes", file.len());
-//    let mut stream = TcpStream::connect("localhost:6771").unwrap();
-//    stream.write(&file).unwrap();
-//    stream.flush().unwrap();
-//    stream.shutdown(Shutdown::Write).unwrap();
+fn get_file_from_data_nodes(nodes: &Vec<AvailableNodes>) {
 }
 
 #[derive(Debug)]

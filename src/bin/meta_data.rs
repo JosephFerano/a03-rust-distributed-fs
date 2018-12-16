@@ -37,14 +37,15 @@ fn main() {
 }
 
 fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
-    let file: GetFile = serde_json::from_str(message).unwrap();
-    let file_info = get_file_info(&conn, &file.name);
+    let filename: String = serde_json::from_str(message).unwrap();
+    let file_info = get_file_info(&conn, &filename);
     if file_info.is_none() {
         match serde_json::to_writer(
             stream,
             &Packet {
                 p_type: PacketType::Error,
                 json: Some(String::from("File not found")),
+                data: None,
             }) {
             Ok(_) => println!("{}", "Copy client attempted to read non-existing file"),
             Err(e) => println!("{}", e),
@@ -63,28 +64,36 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
     }
     match serde_json::to_writer(
         stream,
-        &Packet { p_type: PacketType::Success, json: Some(serde_json::to_string(&nodes).unwrap()) }) {
+        &Packet {
+            p_type: PacketType::Success,
+            json: Some(serde_json::to_string(&nodes).unwrap()),
+            data: None,
+        }) {
         Ok(_) => println!("{}", "Sent nodes with chunks"),
         Err(e) => println!("{}", e),
     };
 }
 
 fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
-    let file: PutFile = serde_json::from_str(message).unwrap();
-    let file_already_exists = add_file(&conn, &file.name, file.size as i32);
+    let file: AddFile = serde_json::from_str(message).unwrap();
+//    let file_already_exists = add_file(&conn, &file.name, file.size as i32);
+    let file_already_exists = false;
     if file_already_exists {
         match serde_json::to_writer(
             stream,
             &Packet {
                 p_type: PacketType::Error,
                 json: Some(String::from("File already exists, please remove before re-uploading")),
+                data: None,
             }) {
             Ok(_) => println!("{}", "Copy client attempted to add an existing file"),
             Err(e) => println!("{}", e),
         };
         return;
     }
-    let file_info = get_file_info(&conn, &file.name).unwrap();
+//    let file_info = get_file_info(&conn, &file.name).unwrap();
+    let file_info = INode { id: 1, name: file.name, size: file.size };
+    println!("{:?}", file_info);
     let mut blocks: Vec<Block> = Vec::new();
     let mut nodes: Vec<AvailableNodes> = Vec::new();
     let dnodes = get_data_nodes(&conn);
@@ -103,10 +112,14 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
             chunk_id: uuid.clone(),
         });
     }
-    add_blocks_to_inode(&conn, file_info.id, &blocks);
+//    add_blocks_to_inode(&conn, file_info.id, &blocks);
     match serde_json::to_writer(
         stream,
-        &Packet { p_type: PacketType::Success, json: Some(serde_json::to_string(&nodes).unwrap()) }) {
+        &Packet {
+            p_type: PacketType::Success,
+            json: Some(serde_json::to_string(&nodes).unwrap()),
+            data: None,
+        }) {
         Ok(_) => println!("{}", "Sent nodes with chunks"),
         Err(e) => println!("{}", e),
     };
@@ -134,7 +147,11 @@ fn node_registration(stream: &mut TcpStream, conn: &Connection, json: &String) {
 }
 
 fn report_success(stream: &mut TcpStream, message: &str) {
-    match serde_json::to_writer(stream, &Packet { p_type: PacketType::Success, json: None }) {
+    match serde_json::to_writer(stream, &Packet {
+        p_type: PacketType::Success,
+        json: None,
+        data: None,
+    }) {
         Ok(_) => println!("{}", message),
         Err(e) => println!("{}", e),
     };
