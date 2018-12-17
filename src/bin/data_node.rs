@@ -10,6 +10,8 @@ use std::io::{Write, Read};
 use std::net::TcpListener;
 use serde_json::from_str;
 use std::fs::File;
+use std::fs;
+use std::error::Error;
 
 fn main() {
     let endpoint = parse_endpoint_from_cli(0);
@@ -19,16 +21,54 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         match serde_json::from_reader(&mut stream) {
-            Ok(Packet { p_type: PacketType::GetFile, json, data, }) =>
-                get(&mut stream, &json.unwrap(), &data.unwrap()),
-            Ok(Packet { p_type: PacketType::PutFile, json, data,  }) =>
-                put(&mut stream, &json.unwrap(), &data.unwrap()),
+            Ok(Packet { p_type: PacketType::GetFile, json, data, }) => {
+                send_file(&mut stream, &json.unwrap(), &data.unwrap());
+                stream.flush().unwrap();
+                stream.shutdown(Shutdown::Write).unwrap();
+            }
+            Ok(Packet { p_type: PacketType::PutFile, json, data, }) =>
+                receive_file(&json.unwrap(), &data.unwrap()),
             Ok(Packet { p_type: PacketType::ShutdownDataNode, .. }) =>
                 shutdown(&mut stream, &endpoint),
             Ok(_) => eprintln!("We don't handle this PacketType"),
             Err(e) => eprintln!("Error parsing json: {}", e.to_string()),
         };
     }
+}
+
+fn receive_file(json: &String, data: &Vec<u8>) {
+    let chunk: Chunk = serde_json::from_str(json).unwrap();
+    let mut copy = File::create(format!("{}_{}", chunk.filename, chunk.index)).unwrap();
+    copy.write_all(&data[..]).unwrap();
+}
+
+fn send_file(stream: &mut TcpStream, json: &String, data: &Vec<u8>) {
+    let chunk: Chunk = serde_json::from_str(json).unwrap();
+    match fs::read(&chunk.filename) {
+        Ok(f) => {
+            let packet = serde_json::to_writer(
+                stream,
+                &Packet {
+                    p_type: PacketType::GetFile,
+                    json: Some(json.clone()),
+                    data: Some(Vec::from(f)),
+                }).unwrap();
+        }
+        Err(e) => {
+            match serde_json::to_writer(
+                stream,
+                &Packet {
+                    p_type: PacketType::Error,
+                    json: Some(String::from(e.description())),
+                    data: None,
+                }) {
+                Ok(_) => println!("{}", "Copy client attempted to read non-existing file"),
+                Err(e) => println!("{}", e),
+            }
+        }
+    };
+    stream.flush().unwrap();
+    stream.shutdown(Shutdown::Write).unwrap();
 }
 
 fn register_with_meta_server(endpoint: &String) {
@@ -42,7 +82,8 @@ fn register_with_meta_server(endpoint: &String) {
                 &NodeRegistration {
                     register: true,
                     ip: String::from(split[0]),
-                    port: from_str(split[1]).unwrap() })
+                    port: from_str(split[1]).unwrap(),
+                })
                 .unwrap()),
             data: None,
         })
@@ -52,18 +93,6 @@ fn register_with_meta_server(endpoint: &String) {
     stream.shutdown(Shutdown::Write).unwrap();
     let result: Packet = serde_json::from_reader(&mut stream).unwrap();
     println!("{:?}", result);
-}
-
-fn put(stream: &mut TcpStream, json: &String, data: &Vec<u8>) {
-    let chunk_id: Chunk = serde_json::from_str(json).unwrap();
-    println!("CId: {:?}", chunk_id);
-    println!("Data Amount: {:?}", data.len());
-    let mut copy = File::create(format!("{}_{}", chunk_id.filename, chunk_id.id)).unwrap();
-    copy.write_all(&data[..]).unwrap();
-}
-
-fn get(stream: &mut TcpStream, json: &String, data: &Vec<u8>) {
-//    let files: String = serde_json::from_str(json).unwrap();
 }
 
 fn shutdown(stream: &mut TcpStream, endpoint: &String) {
@@ -77,7 +106,8 @@ fn shutdown(stream: &mut TcpStream, endpoint: &String) {
                 &NodeRegistration {
                     register: false,
                     ip: String::from(split[0]),
-                    port: from_str(split[1]).unwrap() })
+                    port: from_str(split[1]).unwrap(),
+                })
                 .unwrap()),
             data: None,
         })

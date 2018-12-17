@@ -3,7 +3,6 @@ extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_derive;
-extern crate uuid;
 
 use a03::*;
 use rusqlite::types::ToSql;
@@ -59,7 +58,7 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
         nodes.push(AvailableNodes {
             ip: b.data_node.ip,
             port: b.data_node.port,
-            chunk_id: b.chunk_id,
+            chunk_index: b.chunk_index,
         });
     }
     match serde_json::to_writer(
@@ -76,8 +75,7 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
 
 fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
     let file: AddFile = serde_json::from_str(message).unwrap();
-//    let file_already_exists = add_file(&conn, &file.name, file.size as i32);
-    let file_already_exists = false;
+    let file_already_exists = add_file(&conn, &file.name, file.size as i32);
     if file_already_exists {
         match serde_json::to_writer(
             stream,
@@ -91,17 +89,16 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
         };
         return;
     }
-//    let file_info = get_file_info(&conn, &file.name).unwrap();
-    let file_info = INode { id: 1, name: file.name, size: file.size };
-    println!("{:?}", file_info);
+    let file_info = get_file_info(&conn, &file.name).unwrap();
+//    let file_info = INode { id: 1, name: file.name, size: file.size };
+//    println!("{:?}", file_info);
     let mut blocks: Vec<Block> = Vec::new();
     let mut nodes: Vec<AvailableNodes> = Vec::new();
     let dnodes = get_data_nodes(&conn);
     for i in 0..dnodes.len() {
         let dn = &dnodes[i];
-        let uuid = uuid::Uuid::new_v4().to_string();
         blocks.push(Block {
-            chunk_id: uuid.clone(),
+            chunk_index: i as u32,
             node_id: dn.id,
             file_id: file_info.id as u32,
             id: 0,
@@ -109,10 +106,10 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
         nodes.push(AvailableNodes {
             ip: dn.ip.clone(),
             port: dn.port,
-            chunk_id: uuid.clone(),
+            chunk_index: i as u32,
         });
     }
-//    add_blocks_to_inode(&conn, file_info.id, &blocks);
+    add_blocks_to_inode(&conn, file_info.id, &blocks);
     match serde_json::to_writer(
         stream,
         &Packet {
@@ -260,7 +257,7 @@ fn add_blocks_to_inode(conn: &Connection, fid: u32, blocks: &Vec<Block>) {
     for block in blocks {
         match conn.execute(
             "INSERT INTO block (nid, fid, cid) VALUES (?1, ?2, ?3)",
-            &[&block.node_id as &ToSql, &fid, &block.chunk_id]) {
+            &[&block.node_id as &ToSql, &fid, &block.chunk_index]) {
             Ok(n) => println!("Updated {}", n),
             Err(e) => println!("Error: {}", e),
         }
@@ -275,7 +272,7 @@ fn get_file_inode(conn: &Connection, fid: u32) -> Vec<BlockQuery> {
         &[&fid],
         |row| BlockQuery {
             data_node: DataNode { id: row.get(0), ip: row.get(1), port: row.get(2) },
-            chunk_id: row.get(3),
+            chunk_index: row.get(3),
         }).unwrap();
     let mut blocks: Vec<BlockQuery> = Vec::new();
     for b in iter {
@@ -311,7 +308,7 @@ port INTEGER NOT NULL DEFAULT \"0\")",
 bid INTEGER PRIMARY KEY ASC AUTOINCREMENT,
 fid INTEGER NOT NULL DEFAULT \"0\",
 nid INTEGER NOT NULL DEFAULT \"0\",
-cid TEXT NOT NULL DEFAULT \"0\")",
+cid INTEGER NOT NULL DEFAULT \"0\")",
             NO_PARAMS,
         ).unwrap();
         conn
@@ -463,19 +460,19 @@ cid TEXT NOT NULL DEFAULT \"0\")",
                 file_id: inode.id,
                 id: 0,
                 node_id: 1,
-                chunk_id: String::from("c1"),
+                chunk_index: 0,
             },
             Block {
                 file_id: inode.id,
                 id: 0,
                 node_id: 2,
-                chunk_id: String::from("c2"),
+                chunk_index: 1,
             },
             Block {
                 file_id: inode.id,
                 id: 0,
                 node_id: 3,
-                chunk_id: String::from("c3"),
+                chunk_index: 2,
             },
         );
         add_blocks_to_inode(&conn, inode.id, &blocks);
@@ -483,15 +480,15 @@ cid TEXT NOT NULL DEFAULT \"0\")",
         assert_eq!(inode.name, "main_file");
         assert_eq!(inode.size, 128);
         assert_eq!(blocks.len(), 3);
-        assert_eq!(blocks[0].chunk_id, "c1");
+        assert_eq!(blocks[0].chunk_index, 0);
         assert_eq!(blocks[0].data_node.id, 1);
         assert_eq!(blocks[0].data_node.ip, "127.0.0.1");
         assert_eq!(blocks[0].data_node.port, 1337);
-        assert_eq!(blocks[1].chunk_id, "c2");
+        assert_eq!(blocks[1].chunk_index, 1);
         assert_eq!(blocks[1].data_node.id, 2);
         assert_eq!(blocks[1].data_node.ip, "127.0.0.2");
         assert_eq!(blocks[1].data_node.port, 1338);
-        assert_eq!(blocks[2].chunk_id, "c3");
+        assert_eq!(blocks[2].chunk_index, 2);
         assert_eq!(blocks[2].data_node.id, 3);
         assert_eq!(blocks[2].data_node.ip, "127.0.0.2");
         assert_eq!(blocks[2].data_node.port, 1339);

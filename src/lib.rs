@@ -53,12 +53,12 @@ pub struct AddFile {
 pub struct AvailableNodes {
     pub ip: String,
     pub port: u32,
-    pub chunk_id: String
+    pub chunk_index: u32
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Chunk {
-    pub id: String,
+    pub index: u32,
     pub filename: String,
 }
 
@@ -81,13 +81,13 @@ pub struct Block {
     pub id: u32,
     pub file_id: u32,
     pub node_id: u32,
-    pub chunk_id: String,
+    pub chunk_index: u32,
 }
 
 #[derive(Debug)]
 pub struct BlockQuery {
     pub data_node: DataNode,
-    pub chunk_id: String
+    pub chunk_index: u32
 }
 
 pub fn parse_endpoint_from_cli(arg_index : usize) -> String {

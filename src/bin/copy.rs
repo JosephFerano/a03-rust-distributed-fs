@@ -21,7 +21,7 @@ fn main() {
         packet_type = PacketType::RequestWrite;
         println!("Requesting Write of {}", args.filepath);
         json = Some(serde_json::to_string(
-            &AddFile { name: args.filepath, size: size as u32, }).unwrap())
+            &AddFile { name: args.filepath.clone(), size: size as u32, }).unwrap())
     } else {
         packet_type = PacketType::RequestRead;
         println!("Requesting Read of {}", args.filepath);
@@ -43,11 +43,11 @@ fn main() {
         Ok(_) => {},
         Err(e) => eprintln!("Error parsing json {}", e.to_string()),
     };
-    let filename = &args.filename;
+    let filename = &args.filepath;
     if args.is_copy_to_dfs {
         nodes.map(|ns| send_file_to_data_nodes(&filename, &ns, &file));
     } else {
-        nodes.map(|ns| get_file_from_data_nodes(&ns));
+        nodes.map(|ns| get_file_from_data_nodes(&filename, &ns));
     }
 }
 
@@ -55,7 +55,7 @@ fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file:
     let mut stream = TcpStream::connect("localhost:6771").unwrap();
     println!("Going to send a file! Bytes {}", file.len());
     let chunk = Chunk {
-        id: nodes[0].chunk_id.clone(),
+        index: nodes[0].chunk_index,
         filename: filename.clone(),
     };
     let packet = serde_json::to_writer(
@@ -69,7 +69,35 @@ fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file:
     stream.shutdown(Shutdown::Write).unwrap();
 }
 
-fn get_file_from_data_nodes(nodes: &Vec<AvailableNodes>) {
+fn get_file_from_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>) {
+    let chunk = Chunk {
+        index: nodes[0].chunk_index,
+        filename: filename.clone(),
+    };
+    let mut stream = TcpStream::connect("localhost:6771").unwrap();
+    let packet = serde_json::to_writer(
+        &stream,
+        &Packet {
+            p_type: PacketType::GetFile,
+            json: Some(serde_json::to_string(&chunk).unwrap()),
+            data: None,
+        }).unwrap();
+    stream.flush().unwrap();
+    stream.shutdown(Shutdown::Write).unwrap();
+    match serde_json::from_reader(stream) {
+        Ok(Packet { p_type: PacketType::GetFile, json, data }) => {
+            let data = data.unwrap();
+            let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
+            // TODO: Here we have to rebuild the chunks
+            let mut copy = File::create(chunk.filename).unwrap();
+            copy.write_all(&data[..]).unwrap();
+        },
+        Ok(Packet { p_type: PacketType::Error, json, .. }) => {
+            eprintln!("Data Node Server Error: {}", &json.unwrap());
+        },
+        Ok(_) => {},
+        Err(e) => eprintln!("Error parsing json {}", e.to_string()),
+    };
 }
 
 #[derive(Debug)]
