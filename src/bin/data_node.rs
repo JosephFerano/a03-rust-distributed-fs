@@ -25,12 +25,12 @@ fn main() {
         let mut stream = stream.unwrap();
         match serde_json::from_reader(&mut stream) {
             Ok(Packet { p_type: PacketType::GetFile, json, .. }) => {
-                send_file(&data_path, &mut stream, &json.unwrap());
+                send_chunk(&data_path, &mut stream, &json.unwrap());
                 stream.flush().unwrap();
                 stream.shutdown(Shutdown::Write).unwrap();
             }
             Ok(Packet { p_type: PacketType::PutFile, json, data, }) =>
-                receive_file(&data_path, &json.unwrap(), &data.unwrap()),
+                receive_chunk(&data_path, &json.unwrap(), &data.unwrap()),
             Ok(Packet { p_type: PacketType::ShutdownDataNode, .. }) =>
                 shutdown(&mut stream, &metadata_endpoint, &node_endpoint),
             Ok(_) => eprintln!("We don't handle this PacketType"),
@@ -39,15 +39,14 @@ fn main() {
     }
 }
 
-fn receive_file(base_path: &String, json: &String, data: &Vec<u8>) {
+fn receive_chunk(base_path: &String, json: &String, data: &Vec<u8>) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
     let filepath = format!("{}/{}_{}", base_path, chunk.filename, chunk.index);
-    println!("{}", filepath);
     let mut copy = File::create(filepath).unwrap();
     copy.write_all(&data[..]).unwrap();
 }
 
-fn send_file(base_path: &String, stream: &mut TcpStream, json: &String) {
+fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
     println!("{}", chunk.filename);
     match fs::read(format!("{}/{}_{}", base_path, &chunk.filename, &chunk.index)) {

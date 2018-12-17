@@ -58,22 +58,27 @@ fn send_file_to_data_nodes(
     nodes: &Vec<AvailableNodes>,
     file: &Vec<u8>)
 {
-    let endpoint = format!("{}:{}", nodes[0].ip, nodes[0].port);
-    let mut stream = TcpStream::connect(endpoint).unwrap();
+    let div: usize = ((file.len() as f32) / (nodes.len() as f32)).ceil() as usize;
+    let chunks: Vec<_> = file.chunks(div).collect();
     println!("Going to send a file! Bytes {}", file.len());
-    let chunk = Chunk {
-        index: nodes[0].chunk_index,
-        filename: filename.clone(),
-    };
-    let packet = serde_json::to_writer(
-        &mut stream,
-        &Packet {
-            p_type: PacketType::PutFile,
-            json: Some(serde_json::to_string(&chunk).unwrap()),
-            data: Some(file.clone()),
-        }).unwrap();
-    stream.flush().unwrap();
-    stream.shutdown(Shutdown::Write).unwrap();
+    for node in nodes {
+        let endpoint = format!("{}:{}", node.ip, node.port);
+        let mut stream = TcpStream::connect(endpoint).unwrap();
+        let chunk = Chunk {
+            index: node.chunk_index,
+            filename: filename.clone(),
+        };
+        let packet = serde_json::to_writer(
+            &mut stream,
+            &Packet {
+                p_type: PacketType::PutFile,
+                json: Some(serde_json::to_string(&chunk).unwrap()),
+                data: Some(chunks[node.chunk_index as usize].to_vec()),
+//                data: None,
+            }).unwrap();
+        stream.flush().unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
+    }
 }
 
 fn get_file_from_data_nodes(
@@ -81,35 +86,44 @@ fn get_file_from_data_nodes(
     filename: &String,
     nodes: &Vec<AvailableNodes>)
 {
-    let chunk = Chunk {
-        index: nodes[0].chunk_index,
-        filename: filename.clone(),
-    };
-    let endpoint = format!("{}:{}", nodes[0].ip, nodes[0].port);
-    let mut stream = TcpStream::connect(endpoint).unwrap();
-    let packet = serde_json::to_writer(
-        &stream,
-        &Packet {
-            p_type: PacketType::GetFile,
-            json: Some(serde_json::to_string(&chunk).unwrap()),
-            data: None,
-        }).unwrap();
-    stream.flush().unwrap();
-    stream.shutdown(Shutdown::Write).unwrap();
-    match serde_json::from_reader(stream) {
-        Ok(Packet { p_type: PacketType::GetFile, json, data }) => {
-            let data = data.unwrap();
-            let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
-            // TODO: Here we have to rebuild the chunks
-            let mut copy = File::create(destination_path).unwrap();
-            copy.write_all(&data[..]).unwrap();
+    let mut chunks: Vec<Vec<u8>> = Vec::with_capacity(nodes.len());
+    let mut successful = 0;
+    for node in nodes {
+        let chunk = Chunk {
+            index: node.chunk_index,
+            filename: filename.clone(),
+        };
+        let endpoint = format!("{}:{}", node.ip, node.port);
+        let mut stream = TcpStream::connect(endpoint).unwrap();
+        let packet = serde_json::to_writer(
+            &stream,
+            &Packet {
+                p_type: PacketType::GetFile,
+                json: Some(serde_json::to_string(&chunk).unwrap()),
+                data: None,
+            }).unwrap();
+        stream.flush().unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
+        match serde_json::from_reader(stream) {
+            Ok(Packet { p_type: PacketType::GetFile, json, data }) => {
+                let data = data.unwrap();
+                let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
+                chunks.insert(chunk.index as usize, data);
+                successful += 1;
+            }
+            Ok(Packet { p_type: PacketType::Error, json, .. }) => {
+                eprintln!("Data Node Server Error: {}", &json.unwrap());
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("Error parsing json {}", e.to_string()),
+        };
+    }
+    if successful == nodes.len() {
+        let mut copy = File::create(destination_path).unwrap();
+        for chunk in chunks {
+            copy.write(&chunk[..]).unwrap();
         }
-        Ok(Packet { p_type: PacketType::Error, json, .. }) => {
-            eprintln!("Data Node Server Error: {}", &json.unwrap());
-        }
-        Ok(_) => {}
-        Err(e) => eprintln!("Error parsing json {}", e.to_string()),
-    };
+    }
 }
 
 #[derive(Debug)]
