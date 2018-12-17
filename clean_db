@@ -1,1 +1,1 @@
-rm dfs.db && python dfs_skel/createdb.py
+rm dfs.db && python createdb.py

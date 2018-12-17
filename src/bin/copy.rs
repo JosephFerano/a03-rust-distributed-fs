@@ -12,7 +12,7 @@ use std::fs;
 
 fn main() {
     let args = get_cli_args();
-    let mut stream = TcpStream::connect(args.endpoint).unwrap();
+    let mut stream = TcpStream::connect(&args.endpoint).unwrap();
     let packet_type;
     let json;
     if args.is_copy_to_dfs {
@@ -21,13 +21,13 @@ fn main() {
         let size = file.len();
         println!("Requesting Write of {}", args.filepath);
         json = Some(serde_json::to_string(
-            &AddFile { name: args.filepath.clone(), size: size as u32, }).unwrap())
+            &AddFile { name: args.filepath.clone(), size: size as u32 }).unwrap())
     } else {
         packet_type = PacketType::RequestRead;
         println!("Requesting Read of {}", args.filepath);
         json = Some(serde_json::to_string::<String>(&args.filepath).unwrap())
     }
-    serde_json::to_writer( &mut stream, &Packet { p_type: packet_type, json, data: None, })
+    serde_json::to_writer(&mut stream, &Packet { p_type: packet_type, json, data: None })
         .unwrap();
     stream.flush().unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
@@ -39,8 +39,8 @@ fn main() {
                 .unwrap()),
         Ok(Packet { p_type: PacketType::Error, json, .. }) => {
             eprintln!("Meta Data Server Error: {}", &json.unwrap());
-        },
-        Ok(_) => {},
+        }
+        Ok(_) => {}
         Err(e) => eprintln!("Error parsing json {}", e.to_string()),
     };
     let filename = &args.filepath;
@@ -53,8 +53,13 @@ fn main() {
     }
 }
 
-fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file: &Vec<u8>) {
-    let mut stream = TcpStream::connect("localhost:6771").unwrap();
+fn send_file_to_data_nodes(
+    filename: &String,
+    nodes: &Vec<AvailableNodes>,
+    file: &Vec<u8>)
+{
+    let endpoint = format!("{}:{}", nodes[0].ip, nodes[0].port);
+    let mut stream = TcpStream::connect(endpoint).unwrap();
     println!("Going to send a file! Bytes {}", file.len());
     let chunk = Chunk {
         index: nodes[0].chunk_index,
@@ -71,13 +76,17 @@ fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file:
     stream.shutdown(Shutdown::Write).unwrap();
 }
 
-fn get_file_from_data_nodes(destination_path: &String, filename: &String, nodes: &Vec<AvailableNodes>) {
+fn get_file_from_data_nodes(
+    destination_path: &String,
+    filename: &String,
+    nodes: &Vec<AvailableNodes>)
+{
     let chunk = Chunk {
         index: nodes[0].chunk_index,
         filename: filename.clone(),
     };
-    let mut stream = TcpStream::connect("localhost:6771").unwrap();
-    println!("The filename is {}", filename);
+    let endpoint = format!("{}:{}", nodes[0].ip, nodes[0].port);
+    let mut stream = TcpStream::connect(endpoint).unwrap();
     let packet = serde_json::to_writer(
         &stream,
         &Packet {
@@ -94,11 +103,11 @@ fn get_file_from_data_nodes(destination_path: &String, filename: &String, nodes:
             // TODO: Here we have to rebuild the chunks
             let mut copy = File::create(destination_path).unwrap();
             copy.write_all(&data[..]).unwrap();
-        },
+        }
         Ok(Packet { p_type: PacketType::Error, json, .. }) => {
             eprintln!("Data Node Server Error: {}", &json.unwrap());
-        },
-        Ok(_) => {},
+        }
+        Ok(_) => {}
         Err(e) => eprintln!("Error parsing json {}", e.to_string()),
     };
 }
@@ -117,8 +126,6 @@ pub fn get_cli_args() -> CliArgs {
         panic!("Requires 2 arguments; IP:PORT:FILEPATH and a Local filename/filepath")
     }
     let mut endpoint_arg: String = args.get(0).unwrap().clone();
-
-    println!("Endpoint Arg {}", endpoint_arg);
 
     let endpoint;
     let filepath;
@@ -143,8 +150,6 @@ pub fn get_cli_args() -> CliArgs {
     endpoint = format!("{}:{}", splits[0], splits[1]);
     filepath = String::from(splits[2]);
 
-    let a = CliArgs { endpoint, filepath, filename, is_copy_to_dfs };
-    println!("{:?}", a);
-    a
+    CliArgs { endpoint, filepath, filename, is_copy_to_dfs }
 }
 

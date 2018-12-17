@@ -14,8 +14,8 @@ use std::net::{TcpListener, TcpStream};
 fn main() {
     let conn = Connection::open("dfs.db")
         .expect("Error opening 'dfs.db', consider running 'python createdb.py'");
-
-    let listener = TcpListener::bind("localhost:6770").unwrap();
+    let port = std::env::args().skip(1).next().unwrap_or(String::from(DEFAULT_PORT));
+    let listener = TcpListener::bind(format!("localhost:{}", port)).unwrap();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         match serde_json::from_reader(&mut stream) {
