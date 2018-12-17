@@ -12,13 +12,13 @@ use std::fs;
 
 fn main() {
     let args = get_cli_args();
-    let file = fs::read(&args.filename).expect("File not found!");
-    let size = file.len();
     let mut stream = TcpStream::connect(args.endpoint).unwrap();
     let packet_type;
     let json;
     if args.is_copy_to_dfs {
         packet_type = PacketType::RequestWrite;
+        let file = fs::read(&args.filename).unwrap();
+        let size = file.len();
         println!("Requesting Write of {}", args.filepath);
         json = Some(serde_json::to_string(
             &AddFile { name: args.filepath.clone(), size: size as u32, }).unwrap())
@@ -44,10 +44,12 @@ fn main() {
         Err(e) => eprintln!("Error parsing json {}", e.to_string()),
     };
     let filename = &args.filepath;
+    let destination = &args.filename;
     if args.is_copy_to_dfs {
+        let file = fs::read(&args.filename).unwrap();
         nodes.map(|ns| send_file_to_data_nodes(&filename, &ns, &file));
     } else {
-        nodes.map(|ns| get_file_from_data_nodes(&filename, &ns));
+        nodes.map(|ns| get_file_from_data_nodes(&destination, &filename, &ns));
     }
 }
 
@@ -69,12 +71,13 @@ fn send_file_to_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>, file:
     stream.shutdown(Shutdown::Write).unwrap();
 }
 
-fn get_file_from_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>) {
+fn get_file_from_data_nodes(destination_path: &String, filename: &String, nodes: &Vec<AvailableNodes>) {
     let chunk = Chunk {
         index: nodes[0].chunk_index,
         filename: filename.clone(),
     };
     let mut stream = TcpStream::connect("localhost:6771").unwrap();
+    println!("The filename is {}", filename);
     let packet = serde_json::to_writer(
         &stream,
         &Packet {
@@ -89,7 +92,7 @@ fn get_file_from_data_nodes(filename: &String, nodes: &Vec<AvailableNodes>) {
             let data = data.unwrap();
             let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
             // TODO: Here we have to rebuild the chunks
-            let mut copy = File::create(chunk.filename).unwrap();
+            let mut copy = File::create(destination_path).unwrap();
             copy.write_all(&data[..]).unwrap();
         },
         Ok(Packet { p_type: PacketType::Error, json, .. }) => {
@@ -140,6 +143,8 @@ pub fn get_cli_args() -> CliArgs {
     endpoint = format!("{}:{}", splits[0], splits[1]);
     filepath = String::from(splits[2]);
 
-    CliArgs { endpoint, filepath, filename, is_copy_to_dfs }
+    let a = CliArgs { endpoint, filepath, filename, is_copy_to_dfs };
+    println!("{:?}", a);
+    a
 }
 

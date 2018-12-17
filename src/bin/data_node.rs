@@ -21,8 +21,8 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         match serde_json::from_reader(&mut stream) {
-            Ok(Packet { p_type: PacketType::GetFile, json, data, }) => {
-                send_file(&mut stream, &json.unwrap(), &data.unwrap());
+            Ok(Packet { p_type: PacketType::GetFile, json, .. }) => {
+                send_file(&mut stream, &json.unwrap());
                 stream.flush().unwrap();
                 stream.shutdown(Shutdown::Write).unwrap();
             }
@@ -42,18 +42,19 @@ fn receive_file(json: &String, data: &Vec<u8>) {
     copy.write_all(&data[..]).unwrap();
 }
 
-fn send_file(stream: &mut TcpStream, json: &String, data: &Vec<u8>) {
+fn send_file(stream: &mut TcpStream, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
-    match fs::read(&chunk.filename) {
+    println!("{}", chunk.filename);
+    match fs::read(format!("{}_{}", &chunk.filename, &chunk.index)) {
         Ok(f) => {
-            let packet = serde_json::to_writer(
+            serde_json::to_writer(
                 stream,
                 &Packet {
                     p_type: PacketType::GetFile,
                     json: Some(json.clone()),
                     data: Some(Vec::from(f)),
                 }).unwrap();
-        }
+        },
         Err(e) => {
             match serde_json::to_writer(
                 stream,
@@ -65,10 +66,8 @@ fn send_file(stream: &mut TcpStream, json: &String, data: &Vec<u8>) {
                 Ok(_) => println!("{}", "Copy client attempted to read non-existing file"),
                 Err(e) => println!("{}", e),
             }
-        }
+        },
     };
-    stream.flush().unwrap();
-    stream.shutdown(Shutdown::Write).unwrap();
 }
 
 fn register_with_meta_server(endpoint: &String) {
