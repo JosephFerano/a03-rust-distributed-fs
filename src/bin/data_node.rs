@@ -12,6 +12,7 @@ use serde_json::from_str;
 use std::fs::File;
 use std::fs;
 use std::error::Error;
+use std::io::BufWriter;
 
 fn main() {
     let node_endpoint = parse_endpoint_from_cli(0);
@@ -24,13 +25,15 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         match serde_json::from_reader(&mut stream) {
-            Ok(Packet { p_type: PacketType::GetFile, json, .. }) => {
+            Ok(Packet { p_type: PacketType::GetFile, json }) => {
                 send_chunk(&data_path, &mut stream, &json.unwrap());
                 stream.flush().unwrap();
                 stream.shutdown(Shutdown::Write).unwrap();
             }
-            Ok(Packet { p_type: PacketType::PutFile, json, data, }) =>
-                receive_chunk(&data_path, &json.unwrap(), &data.unwrap()),
+            Ok(Packet { p_type: PacketType::PutFile, json }) => {
+                println!("Receiving chunk");
+                receive_chunk(&mut stream, &data_path, &json.unwrap());
+            },
             Ok(Packet { p_type: PacketType::ShutdownDataNode, .. }) =>
                 shutdown(&mut stream, &metadata_endpoint, &node_endpoint),
             Ok(_) => eprintln!("We don't handle this PacketType"),
@@ -39,11 +42,16 @@ fn main() {
     }
 }
 
-fn receive_chunk(base_path: &String, json: &String, data: &Vec<u8>) {
+fn receive_chunk(stream: &mut TcpStream, base_path: &String, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
+    let mut buf = [0u8; 1];
     let filepath = format!("{}/{}_{}", base_path, chunk.filename, chunk.index);
-    let mut copy = File::create(filepath).unwrap();
-    copy.write_all(&data[..]).unwrap();
+    let mut copy = BufWriter::new(File::create(filepath).unwrap());
+    for i in 0..chunk.file_size as usize {
+        stream.read(&mut buf).unwrap();
+        copy.write(&buf).unwrap();
+        copy.flush().unwrap();
+    }
 }
 
 fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
@@ -56,21 +64,19 @@ fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
                 &Packet {
                     p_type: PacketType::GetFile,
                     json: Some(json.clone()),
-                    data: Some(Vec::from(f)),
                 }).unwrap();
-        },
+        }
         Err(e) => {
             match serde_json::to_writer(
                 stream,
                 &Packet {
                     p_type: PacketType::Error,
                     json: Some(String::from(e.description())),
-                    data: None,
                 }) {
                 Ok(_) => println!("{}", "Copy client attempted to read non-existing file"),
                 Err(e) => println!("{}", e),
             }
-        },
+        }
     };
 }
 
@@ -89,7 +95,6 @@ fn register_with_meta_server(metadata_endpoint: &String, node_endpoint: &String)
                     port: from_str(split[1]).unwrap(),
                 })
                 .unwrap()),
-            data: None,
         })
         .unwrap();
     println!("Registered myself");
@@ -113,7 +118,6 @@ fn shutdown(stream: &mut TcpStream, metadata_endpoint: &String, node_endpoint: &
                     port: from_str(split[1]).unwrap(),
                 })
                 .unwrap()),
-            data: None,
         })
         .unwrap();
     println!("Unregistered myself");

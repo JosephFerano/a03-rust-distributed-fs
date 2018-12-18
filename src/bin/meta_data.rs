@@ -44,7 +44,6 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
             &Packet {
                 p_type: PacketType::Error,
                 json: Some(String::from("File not found")),
-                data: None,
             }) {
             Ok(_) => println!("{}", "Copy client attempted to read non-existing file"),
             Err(e) => println!("{}", e),
@@ -66,7 +65,6 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
         &Packet {
             p_type: PacketType::Success,
             json: Some(serde_json::to_string(&nodes).unwrap()),
-            data: None,
         }) {
         Ok(_) => println!("{}", "Sent nodes with chunks"),
         Err(e) => println!("{}", e),
@@ -82,7 +80,6 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
             &Packet {
                 p_type: PacketType::Error,
                 json: Some(String::from("File already exists, please remove before re-uploading")),
-                data: None,
             }) {
             Ok(_) => println!("{}", "Copy client attempted to add an existing file"),
             Err(e) => println!("{}", e),
@@ -113,7 +110,6 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
         &Packet {
             p_type: PacketType::Success,
             json: Some(serde_json::to_string(&nodes).unwrap()),
-            data: None,
         }) {
         Ok(_) => println!("{}", "Sent nodes with chunks"),
         Err(e) => println!("{}", e),
@@ -145,7 +141,6 @@ fn report_success(stream: &mut TcpStream, message: &str) {
     match serde_json::to_writer(stream, &Packet {
         p_type: PacketType::Success,
         json: None,
-        data: None,
     }) {
         Ok(_) => println!("{}", message),
         Err(e) => println!("{}", e),

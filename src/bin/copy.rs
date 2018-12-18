@@ -8,6 +8,7 @@ use std::net::{TcpStream, Shutdown};
 use std::io::Write;
 use std::fs::File;
 use std::fs;
+use std::io::Read;
 
 fn main() {
     let args = get_cli_args();
@@ -26,7 +27,7 @@ fn main() {
         println!("Requesting Read of {}", args.filepath);
         json = Some(serde_json::to_string::<String>(&args.filepath).unwrap())
     }
-    serde_json::to_writer(&mut stream, &Packet { p_type: packet_type, json, data: None })
+    serde_json::to_writer(&mut stream, &Packet { p_type: packet_type, json, })
         .unwrap();
     stream.flush().unwrap();
     stream.shutdown(Shutdown::Write).unwrap();
@@ -59,26 +60,27 @@ fn send_file_to_data_nodes(
 {
     let div: usize = ((file.len() as f32) / (nodes.len() as f32)).ceil() as usize;
     let chunks: Vec<_> = file.chunks(div).collect();
-    println!("Going to send a file! Bytes {}", file.len());
     for node in nodes {
         let endpoint = format!("{}:{}", node.ip, node.port);
-        let mut stream = TcpStream::connect(endpoint).unwrap();
+        println!("{}", endpoint);
+        let mut stream = TcpStream::connect(&endpoint).unwrap();
+        let file_size = chunks[node.chunk_index as usize].len() as i64;
         let chunk = Chunk {
             index: node.chunk_index,
             filename: filename.clone(),
+            file_size,
         };
-        println!("Sending");
         serde_json::to_writer(
             &mut stream,
             &Packet {
                 p_type: PacketType::PutFile,
                 json: Some(serde_json::to_string(&chunk).unwrap()),
-                data: Some(chunks[node.chunk_index as usize].to_vec()),
-//                data: None,
             }).unwrap();
+        stream.flush().unwrap();
+        stream.write(chunks[node.chunk_index as usize]).unwrap();
+        stream.flush().unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
     }
-//    stream.flush().unwrap();
-//    stream.shutdown(Shutdown::Write).unwrap();
 }
 
 fn get_file_from_data_nodes(
@@ -92,6 +94,7 @@ fn get_file_from_data_nodes(
         let chunk = Chunk {
             index: node.chunk_index,
             filename: filename.clone(),
+            file_size: 128,
         };
         let endpoint = format!("{}:{}", node.ip, node.port);
         let mut stream = TcpStream::connect(endpoint).unwrap();
@@ -100,15 +103,14 @@ fn get_file_from_data_nodes(
             &Packet {
                 p_type: PacketType::GetFile,
                 json: Some(serde_json::to_string(&chunk).unwrap()),
-                data: None,
             }).unwrap();
         stream.flush().unwrap();
         stream.shutdown(Shutdown::Write).unwrap();
         match serde_json::from_reader(stream) {
-            Ok(Packet { p_type: PacketType::GetFile, json, data }) => {
-                let data = data.unwrap();
+            Ok(Packet { p_type: PacketType::GetFile, json, }) => {
+//                let data = data.unwrap();
                 let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
-                chunks.insert(chunk.index as usize, data);
+//                chunks.insert(chunk.index as usize, data);
                 successful += 1;
             }
             Ok(Packet { p_type: PacketType::Error, json, .. }) => {

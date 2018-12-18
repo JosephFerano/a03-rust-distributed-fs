@@ -28,7 +28,6 @@ pub enum PacketType {
 pub struct Packet {
     pub p_type: PacketType,
     pub json: Option<String>,
-    pub data: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -60,6 +59,7 @@ pub struct AvailableNodes {
 pub struct Chunk {
     pub index: u32,
     pub filename: String,
+    pub file_size: i64,
 }
 
 #[derive(Debug)]
