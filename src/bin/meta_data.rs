@@ -75,7 +75,7 @@ fn request_read(stream: &mut TcpStream, conn: &Connection, message: &str) {
 
 fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
     let file: AddFile = serde_json::from_str(message).unwrap();
-    let file_already_exists = add_file(&conn, &file.name, file.size as i32);
+    let file_already_exists = add_file(&conn, &file.name, file.size as i64);
     if file_already_exists {
         match serde_json::to_writer(
             stream,
@@ -90,8 +90,6 @@ fn request_write(stream: &mut TcpStream, conn: &Connection, message: &str) {
         return;
     }
     let file_info = get_file_info(&conn, &file.name).unwrap();
-//    let file_info = INode { id: 1, name: file.name, size: file.size };
-//    println!("{:?}", file_info);
     let mut blocks: Vec<Block> = Vec::new();
     let mut nodes: Vec<AvailableNodes> = Vec::new();
     let dnodes = get_data_nodes(&conn);
@@ -201,7 +199,7 @@ fn get_data_nodes(conn: &Connection) -> Vec<DataNode> {
     nodes
 }
 
-fn add_file(conn: &Connection, fname: &String, fsize: i32) -> bool {
+fn add_file(conn: &Connection, fname: &String, fsize: i64) -> bool {
     let file_exists = conn.query_row(
         "SELECT fid FROM inode WHERE fname = ?1",
         &[&fname as &ToSql],

@@ -46,7 +46,7 @@ pub struct NodeRegistration {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddFile {
     pub name: String,
-    pub size: u32
+    pub size: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

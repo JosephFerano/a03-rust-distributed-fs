@@ -1,12 +1,11 @@
 extern crate a03;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
 extern crate serde_derive;
 
 use a03::*;
 use std::net::{TcpStream, Shutdown};
-use std::io::{Write, Read};
+use std::io::Write;
 use std::fs::File;
 use std::fs;
 
@@ -19,9 +18,9 @@ fn main() {
         packet_type = PacketType::RequestWrite;
         let file = fs::read(&args.filename).unwrap();
         let size = file.len();
-        println!("Requesting Write of {}", args.filepath);
+        println!("Sending file of size {}", size);
         json = Some(serde_json::to_string(
-            &AddFile { name: args.filepath.clone(), size: size as u32 }).unwrap())
+            &AddFile { name: args.filepath.clone(), size: size as u64 }).unwrap())
     } else {
         packet_type = PacketType::RequestRead;
         println!("Requesting Read of {}", args.filepath);
@@ -68,7 +67,8 @@ fn send_file_to_data_nodes(
             index: node.chunk_index,
             filename: filename.clone(),
         };
-        let packet = serde_json::to_writer(
+        println!("Sending");
+        serde_json::to_writer(
             &mut stream,
             &Packet {
                 p_type: PacketType::PutFile,
@@ -76,9 +76,9 @@ fn send_file_to_data_nodes(
                 data: Some(chunks[node.chunk_index as usize].to_vec()),
 //                data: None,
             }).unwrap();
-        stream.flush().unwrap();
-        stream.shutdown(Shutdown::Write).unwrap();
     }
+//    stream.flush().unwrap();
+//    stream.shutdown(Shutdown::Write).unwrap();
 }
 
 fn get_file_from_data_nodes(
@@ -95,7 +95,7 @@ fn get_file_from_data_nodes(
         };
         let endpoint = format!("{}:{}", node.ip, node.port);
         let mut stream = TcpStream::connect(endpoint).unwrap();
-        let packet = serde_json::to_writer(
+        serde_json::to_writer(
             &stream,
             &Packet {
                 p_type: PacketType::GetFile,
@@ -135,7 +135,7 @@ pub struct CliArgs {
 }
 
 pub fn get_cli_args() -> CliArgs {
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
         panic!("Requires 2 arguments; IP:PORT:FILEPATH and a Local filename/filepath")
     }
