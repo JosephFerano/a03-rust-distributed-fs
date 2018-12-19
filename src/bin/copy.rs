@@ -77,7 +77,7 @@ fn send_file_to_data_nodes(
                 json: Some(serde_json::to_string(&chunk).unwrap()),
             }).unwrap();
         stream.flush().unwrap();
-        stream.write(chunks[node.chunk_index as usize]).unwrap();
+        stream.write_all(chunks[node.chunk_index as usize]).unwrap();
         stream.flush().unwrap();
         stream.shutdown(Shutdown::Write).unwrap();
     }
