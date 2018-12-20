@@ -44,10 +44,10 @@ fn main() {
 
 fn receive_chunk(stream: &mut TcpStream, base_path: &String, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
-    let mut buf = [0u8; 8];
+    let mut buf = [0u8; 256];
     let filepath = format!("{}/{}_{}", base_path, chunk.filename, chunk.index);
     let mut copy = BufWriter::new(File::create(filepath).unwrap());
-    for _ in 0..(chunk.file_size / 8 + 1) as usize {
+    for _ in 0..(chunk.file_size / 256 + 1) as usize {
         stream.read(&mut buf).unwrap();
         copy.write_all(&buf).unwrap();
         copy.flush().unwrap();
@@ -56,15 +56,20 @@ fn receive_chunk(stream: &mut TcpStream, base_path: &String, json: &String) {
 
 fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
-    println!("{}", chunk.filename);
+    println!("Sending {}", chunk.filename);
     match fs::read(format!("{}/{}_{}", base_path, &chunk.filename, &chunk.index)) {
-        Ok(_) => {
+        Ok(file) => {
             serde_json::to_writer(
-                stream,
+                &mut *stream,
                 &Packet {
                     p_type: PacketType::GetFile,
-                    json: Some(json.clone()),
+                    json: Some(serde_json::to_string(
+                        &Chunk { file_size: file.len() as i64, ..chunk}).unwrap()),
                 }).unwrap();
+            stream.flush().unwrap();
+            stream.write_all(&file).unwrap();
+            stream.flush().unwrap();
+            stream.shutdown(Shutdown::Write).unwrap();
         }
         Err(e) => {
             match serde_json::to_writer(
