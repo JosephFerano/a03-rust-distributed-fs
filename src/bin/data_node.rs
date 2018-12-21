@@ -26,8 +26,6 @@ fn main() {
         match serde_json::Deserializer::from_reader(&mut stream).into_iter().next().unwrap() {
             Ok(Packet { p_type: PacketType::GetFile, json }) => {
                 send_chunk(&data_path, &mut stream, &json.unwrap());
-                stream.flush().unwrap();
-                stream.shutdown(Shutdown::Write).unwrap();
             }
             Ok(Packet { p_type: PacketType::PutFile, json }) => {
                 println!("Receiving chunk");
