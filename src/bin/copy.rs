@@ -78,7 +78,7 @@ fn send_file_to_data_nodes(
                 json: Some(serde_json::to_string(&chunk).unwrap()),
             }).unwrap();
         stream.flush().unwrap();
-        stream.write_all(chunks[node.chunk_index as usize]).unwrap();
+        stream.write(chunks[node.chunk_index as usize]).unwrap();
         stream.flush().unwrap();
         stream.shutdown(Shutdown::Write).unwrap();
     }
@@ -98,6 +98,7 @@ fn get_file_from_data_nodes(
             file_size: 0,
         };
         let endpoint = format!("{}:{}", node.ip, node.port);
+        println!("Connecting to endpoint: {}", endpoint);
         let mut stream = TcpStream::connect(endpoint).unwrap();
         serde_json::to_writer(
             &stream,
@@ -106,10 +107,10 @@ fn get_file_from_data_nodes(
                 json: Some(serde_json::to_string(&chunk).unwrap()),
             }).unwrap();
         stream.flush().unwrap();
-        stream.shutdown(Shutdown::Write).unwrap();
         match serde_json::Deserializer::from_reader(&mut stream).into_iter().next().unwrap() {
             Ok(Packet { p_type: PacketType::GetFile, json, }) => {
                 let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
+                println!("Getting chunk: {:?}", chunk);
                 receive_chunk(&mut stream, &chunk, &mut file);
             },
             Ok(Packet { p_type: PacketType::Error, json, .. }) => {
@@ -122,10 +123,10 @@ fn get_file_from_data_nodes(
 }
 
 fn receive_chunk(stream: &mut TcpStream, chunk: &Chunk, chunk_buf: &mut BufWriter<File>) {
-    let mut buf = [0u8; 256];
-    for _ in 0..(chunk.file_size / 256 + 1) as usize {
+    let mut buf = [0u8; 1];
+    for _ in 0..(chunk.file_size) as usize {
         stream.read(&mut buf).unwrap();
-        chunk_buf.write_all(&buf).unwrap();
+        chunk_buf.write(&buf).unwrap();
         chunk_buf.flush().unwrap();
     }
 }

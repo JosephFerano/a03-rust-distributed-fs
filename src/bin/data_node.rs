@@ -44,12 +44,12 @@ fn main() {
 
 fn receive_chunk(stream: &mut TcpStream, base_path: &String, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
-    let mut buf = [0u8; 256];
+    let mut buf = [0u8; 1];
     let filepath = format!("{}/{}_{}", base_path, chunk.filename, chunk.index);
     let mut copy = BufWriter::new(File::create(filepath).unwrap());
-    for _ in 0..(chunk.file_size / 256 + 1) as usize {
+    for _ in 0..(chunk.file_size) as usize {
         stream.read(&mut buf).unwrap();
-        copy.write_all(&buf).unwrap();
+        copy.write(&buf).unwrap();
         copy.flush().unwrap();
     }
 }
@@ -67,7 +67,7 @@ fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
                         &Chunk { file_size: file.len() as i64, ..chunk}).unwrap()),
                 }).unwrap();
             stream.flush().unwrap();
-            stream.write_all(&file).unwrap();
+            stream.write(&file).unwrap();
             stream.flush().unwrap();
             stream.shutdown(Shutdown::Write).unwrap();
         }
