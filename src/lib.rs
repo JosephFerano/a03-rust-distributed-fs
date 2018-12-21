@@ -91,7 +91,7 @@ pub struct BlockQuery {
 }
 
 pub fn parse_endpoint_from_cli(arg_index : usize) -> String {
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let endpoint_arg: String = args.get(arg_index).expect("No IP provided").clone();
 
     if endpoint_arg.contains(":") {

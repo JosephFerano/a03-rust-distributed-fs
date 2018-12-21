@@ -8,6 +8,5 @@
 *.db
 dfs_skel/
 venv/
-dn1/
-dn2/
+dn*/
 copy_dir/

@@ -1,1 +1,1 @@
-echo $1 | nc -v -N localhost 6770
+echo $1 | nc -v -N localhost $2

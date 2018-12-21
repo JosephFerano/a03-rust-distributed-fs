@@ -1,25 +1,23 @@
 extern crate a03;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
 extern crate serde_derive;
 
 use a03::*;
 use std::net::{TcpStream, Shutdown};
-use std::io::{Write, Read};
+use std::io::{Write, BufWriter};
 use std::net::TcpListener;
 use serde_json::from_str;
 use std::fs::File;
 use std::fs;
 use std::error::Error;
-use std::io::BufWriter;
 use std::time::Instant;
 
 fn main() {
     let node_endpoint = parse_endpoint_from_cli(0);
     let metadata_endpoint = parse_endpoint_from_cli(1);
     let data_path = std::env::args().skip(3).next()
-        .expect("Missing data path");
+        .unwrap_or(String::from("."));
     let listener = TcpListener::bind(&node_endpoint).unwrap();
     register_with_meta_server(&metadata_endpoint, &node_endpoint);
 

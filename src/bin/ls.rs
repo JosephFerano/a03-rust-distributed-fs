@@ -1,14 +1,10 @@
 extern crate a03;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
 extern crate serde_derive;
 
 use a03::*;
-use std::net::{TcpListener, TcpStream, Shutdown, SocketAddrV4, Ipv4Addr};
-use std::borrow::Cow;
-use std::thread;
-use std::io::Read;
+use std::net::{TcpStream, Shutdown };
 use std::io::Write;
 
 fn main() {
