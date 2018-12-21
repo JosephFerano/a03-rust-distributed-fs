@@ -5,11 +5,10 @@ extern crate serde_derive;
 
 use a03::*;
 use std::net::{TcpStream, Shutdown};
-use std::io::Write;
 use std::fs::File;
 use std::fs;
-use std::io::Read;
-use std::io::BufWriter;
+use std::io::{Write, BufWriter};
+use std::time::Instant;
 
 fn main() {
     let args = get_cli_args();
@@ -111,7 +110,10 @@ fn get_file_from_data_nodes(
             Ok(Packet { p_type: PacketType::GetFile, json, }) => {
                 let chunk: Chunk = serde_json::from_str(&json.unwrap()).unwrap();
                 println!("Getting chunk: {:?}", chunk);
+                let start = Instant::now();
                 receive_chunk(&mut stream, &chunk, &mut file);
+                let elapsed = start.elapsed();
+                println!("Elapsed: {} ms", (elapsed.as_secs() * 1_000) + (elapsed.subsec_nanos() / 1_000_000) as u64);
             },
             Ok(Packet { p_type: PacketType::Error, json, .. }) => {
                 eprintln!("Data Node Server Error: {}", &json.unwrap());
@@ -121,16 +123,6 @@ fn get_file_from_data_nodes(
         };
     }
 }
-
-fn receive_chunk(stream: &mut TcpStream, chunk: &Chunk, chunk_buf: &mut BufWriter<File>) {
-    let mut buf = [0u8; 1];
-    for _ in 0..(chunk.file_size) as usize {
-        stream.read(&mut buf).unwrap();
-        chunk_buf.write(&buf).unwrap();
-        chunk_buf.flush().unwrap();
-    }
-}
-
 
 #[derive(Debug)]
 pub struct CliArgs {

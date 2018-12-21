@@ -4,9 +4,9 @@ extern crate serde_json;
 extern crate serde_derive;
 
 use std::borrow::Cow;
-use std::net::Ipv4Addr;
-use std::net::SocketAddrV4;
-use std::str::FromStr;
+use std::net::TcpStream;
+use std::fs::File;
+use std::io::{Write, Read, BufWriter};
 
 pub const DEFAULT_PORT: &str = "8000";
 
@@ -100,4 +100,17 @@ pub fn parse_endpoint_from_cli(arg_index : usize) -> String {
         format!("{}:{}", endpoint_arg, DEFAULT_PORT)
     }
 }
+
+pub fn receive_chunk(stream: &mut TcpStream, chunk: &Chunk, chunk_buf: &mut BufWriter<File>) {
+    let mut buf = [0u8; 256];
+    let mut bytes_read = 0;
+    while bytes_read < chunk.file_size as usize {
+        let bytes = stream.read(&mut buf).unwrap();
+        chunk_buf.write_all(&buf[0..bytes]).unwrap();
+        bytes_read += bytes;
+    }
+    chunk_buf.flush().unwrap();
+}
+
+
 

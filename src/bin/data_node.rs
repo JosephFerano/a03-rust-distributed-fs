@@ -13,6 +13,7 @@ use std::fs::File;
 use std::fs;
 use std::error::Error;
 use std::io::BufWriter;
+use std::time::Instant;
 
 fn main() {
     let node_endpoint = parse_endpoint_from_cli(0);
@@ -32,7 +33,7 @@ fn main() {
             }
             Ok(Packet { p_type: PacketType::PutFile, json }) => {
                 println!("Receiving chunk");
-                receive_chunk(&mut stream, &data_path, &json.unwrap());
+                receive_chunk_from_copy(&mut stream, &data_path, &json.unwrap());
             },
             Ok(Packet { p_type: PacketType::ShutdownDataNode, .. }) =>
                 shutdown(&metadata_endpoint, &node_endpoint),
@@ -42,16 +43,15 @@ fn main() {
     }
 }
 
-fn receive_chunk(stream: &mut TcpStream, base_path: &String, json: &String) {
+fn receive_chunk_from_copy(stream: &mut TcpStream, base_path: &String, json: &String) {
     let chunk: Chunk = serde_json::from_str(json).unwrap();
-    let mut buf = [0u8; 1];
     let filepath = format!("{}/{}_{}", base_path, chunk.filename, chunk.index);
-    let mut copy = BufWriter::new(File::create(filepath).unwrap());
-    for _ in 0..(chunk.file_size) as usize {
-        stream.read(&mut buf).unwrap();
-        copy.write(&buf).unwrap();
-        copy.flush().unwrap();
-    }
+    let mut file = BufWriter::new(File::create(filepath).unwrap());
+    let start = Instant::now();
+    receive_chunk(&mut *stream, &chunk, &mut file);
+    let elapsed = start.elapsed();
+    println!("Elapsed: {} ms", (elapsed.as_secs() * 1_000) + (elapsed.subsec_nanos() / 1_000_000) as u64);
+    file.flush().unwrap();
 }
 
 fn send_chunk(base_path: &String, stream: &mut TcpStream, json: &String) {
