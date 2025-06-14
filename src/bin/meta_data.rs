@@ -1,10 +1,10 @@
-extern crate a03;
+extern crate distributed_fs;
 extern crate rusqlite;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_derive;
 
-use a03::*;
+use distributed_fs::*;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
 use std::borrow::Cow;

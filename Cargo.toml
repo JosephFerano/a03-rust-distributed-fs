@@ -1,5 +1,5 @@
 [package]
-name = "a03"
+name = "distributed-fs"
 version = "0.1.0"
 authors = ["Joseph Ferano <joseph@ferano.io>"]
 
